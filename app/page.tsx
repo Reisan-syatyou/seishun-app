@@ -1,65 +1,393 @@
-import Image from "next/image";
+'use client';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friends' | 'search';
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+  const [screen, setScreen] = useState<Screen>('top');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [school, setSchool] = useState('');
+  const [graduationDate, setGraduationDate] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [todayPost, setTodayPost] = useState<{image_url: string} | null>(null);
+  const [userId, setUserId] = useState('');
+  const [friends, setFriends] = useState<{id: string; display_name: string; username: string}[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{id: string; display_name: string; username: string}[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<{id: string; requester: {id: string; display_name: string; username: string}}[]>([]);
+  const [friendsPosts, setFriendsPosts] = useState<{image_url: string; user_id: string; display_name: string}[]>([]);
+  const [activeTab, setActiveTab] = useState<'mypost' | 'friends'>('mypost');
+
+  const fetchTodayPost = async (uid: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase.from('posts').select('*').eq('user_id', uid).eq('posted_at', today);
+    if (data && data.length > 0) setTodayPost(data[0]);
+  };
+
+  const fetchFriends = async (uid: string) => {
+    const { data } = await supabase
+      .from('friendships')
+      .select('*, requester:requester_id(id, display_name, username), receiver:receiver_id(id, display_name, username)')
+      .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`)
+      .eq('status', 'accepted');
+    if (data) {
+      const friendList = data.map(f => f.requester_id === uid ? f.receiver : f.requester);
+      setFriends(friendList);
+    }
+  };
+
+  const fetchPendingRequests = async (uid: string) => {
+    const { data } = await supabase
+      .from('friendships')
+      .select('*, requester:requester_id(id, display_name, username)')
+      .eq('receiver_id', uid)
+      .eq('status', 'pending');
+    if (data) setPendingRequests(data);
+  };
+
+  const fetchFriendsPosts = async (uid: string) => {
+    const { data: friendships } = await supabase
+      .from('friendships')
+      .select('requester_id, receiver_id')
+      .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`)
+      .eq('status', 'accepted');
+    if (!friendships || friendships.length === 0) return;
+    const friendIds = friendships.map(f => f.requester_id === uid ? f.receiver_id : f.requester_id);
+    const today = new Date().toISOString().split('T')[0];
+    const { data: posts } = await supabase
+      .from('posts')
+      .select('*, user:user_id(display_name)')
+      .in('user_id', friendIds)
+      .eq('posted_at', today);
+    if (posts) setFriendsPosts(posts.map(p => ({ ...p, display_name: p.user?.display_name || '' })));
+  };
+
+  const acceptFriendRequest = async (friendshipId: string, uid: string) => {
+    await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
+    await fetchFriends(uid);
+    await fetchPendingRequests(uid);
+  };
+
+  const searchUsers = async () => {
+    if (!searchQuery.trim()) return;
+    const { data } = await supabase
+      .from('users')
+      .select('id, display_name, username')
+      .ilike('username', `%${searchQuery}%`);
+    if (data) setSearchResults(data);
+  };
+
+  const sendFriendRequest = async (receiverId: string) => {
+    await supabase.from('friendships').insert({
+      requester_id: userId,
+      receiver_id: receiverId,
+      status: 'pending',
+    });
+    alert('フレンド申請を送りました！');
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        const { data: user } = await supabase.from('users').select('*').eq('id', data.session.user.id).single();
+        if (user?.username) {
+          setUsername(user.username);
+          setUserId(data.session.user.id);
+          await fetchTodayPost(data.session.user.id);
+          await fetchFriendsPosts(data.session.user.id);
+          setScreen('home');
+        } else {
+          setScreen('setup');
+        }
+      }
+    });
+  }, []);
+
+  const register = async () => {
+    setLoading(true); setError('');
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) { setError(error.message); setLoading(false); return; }
+    setScreen('setup');
+    setLoading(false);
+  };
+
+  const login = async () => {
+    setLoading(true); setError('');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { setError(error.message); setLoading(false); return; }
+    const { data: user } = await supabase.from('users').select('*').eq('id', data.user.id).single();
+    if (user?.username) {
+      setUsername(user.username);
+      setUserId(data.user.id);
+      await fetchTodayPost(data.user.id);
+      await fetchFriendsPosts(data.user.id);
+      setScreen('home');
+    } else {
+      setScreen('setup');
+    }
+    setLoading(false);
+  };
+
+  const setup = async () => {
+    if (!username || !displayName || !graduationDate) { setError('すべて入力してください'); return; }
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return;
+    await supabase.from('users').upsert({
+      id: data.session.user.id,
+      username, display_name: displayName,
+      school, graduation_date: graduationDate,
+    });
+    setUserId(data.session.user.id);
+    setScreen('home');
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setScreen('top');
+    setUsername('');
+    setTodayPost(null);
+    setFriendsPosts([]);
+  };
+
+  const bg = 'linear-gradient(160deg, #e0f7fa 0%, #b2ebf2 40%, #e0f2f1 100%)';
+  const card = 'rgba(255,255,255,0.7)';
+  const accent = '#0288d1';
+  const text = '#01579b';
+  const subtext = '#4fc3f7';
+
+  const inputCls: React.CSSProperties = {
+    width: '100%', padding: '12px 16px', fontSize: '16px',
+    borderRadius: '12px', border: `1.5px solid ${subtext}`,
+    background: 'rgba(255,255,255,0.8)', color: text, outline: 'none',
+  };
+
+  const btnCls = (color = accent): React.CSSProperties => ({
+    width: '100%', padding: '14px', fontSize: '16px', fontWeight: 'bold',
+    borderRadius: '12px', border: 'none', background: color,
+    color: 'white', cursor: 'pointer', boxShadow: `0 4px 12px ${color}44`,
+  });
+
+  if (screen === 'top') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, padding: '20px', fontFamily: 'sans-serif' }}>
+      <div style={{ fontSize: '72px', marginBottom: '16px' }}>📸</div>
+      <h1 style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px', color: accent }}>青春snap</h1>
+      <p style={{ color: text, marginBottom: '8px', textAlign: 'center', opacity: 0.8 }}>毎日1枚。卒業の日に、全部開く。</p>
+      <p style={{ color: subtext, fontSize: '13px', marginBottom: '48px', textAlign: 'center' }}>今日の写真は今日だけ見られる。</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '320px' }}>
+        <button onClick={() => setScreen('register')} style={btnCls()}>はじめる</button>
+        <button onClick={() => setScreen('login')} style={{ ...btnCls(), background: 'white', color: accent, boxShadow: `0 4px 12px rgba(2,136,209,0.15)` }}>ログイン</button>
+      </div>
+    </main>
+  );
+
+  if (screen === 'login' || screen === 'register') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, padding: '20px', fontFamily: 'sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: '360px', background: card, borderRadius: '24px', padding: '32px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)' }}>
+        <div style={{ fontSize: '40px', textAlign: 'center', marginBottom: '16px' }}>📸</div>
+        <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center', color: accent }}>
+          {screen === 'login' ? 'ログイン' : 'アカウント作成'}
+        </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="メールアドレス" type="email" style={inputCls} />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="パスワード（6文字以上）" type="password" style={inputCls} />
+          {error && <p style={{ color: '#e53935', fontSize: '13px' }}>{error}</p>}
+          <button onClick={screen === 'login' ? login : register} disabled={loading} style={btnCls()}>
+            {loading ? '...' : screen === 'login' ? 'ログイン' : '登録'}
+          </button>
+          <button onClick={() => { setScreen('top'); setError(''); }} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>← 戻る</button>
+        </div>
+      </div>
+    </main>
+  );
+
+  if (screen === 'setup') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, padding: '20px', fontFamily: 'sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: '360px', background: card, borderRadius: '24px', padding: '32px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)' }}>
+        <div style={{ fontSize: '40px', textAlign: 'center', marginBottom: '16px' }}>✏️</div>
+        <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center', color: accent }}>プロフィール設定</h2>
+        <p style={{ color: subtext, fontSize: '13px', marginBottom: '24px', textAlign: 'center' }}>卒業日を設定してください</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ユーザーID（例：taro_2025）" style={inputCls} />
+          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="表示名（例：たろう）" style={inputCls} />
+          <input value={school} onChange={(e) => setSchool(e.target.value)} placeholder="学校名（任意）" style={inputCls} />
+          <div>
+            <p style={{ fontSize: '13px', color: subtext, marginBottom: '6px' }}>卒業予定日</p>
+            <input value={graduationDate} onChange={(e) => setGraduationDate(e.target.value)} type="date" style={inputCls} />
+          </div>
+          {error && <p style={{ color: '#e53935', fontSize: '13px' }}>{error}</p>}
+          <button onClick={setup} style={btnCls()}>青春をはじめる 🌸</button>
+        </div>
+      </div>
+    </main>
+  );
+
+  if (screen === 'friends') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
+      <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>👥 友達</h2>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => setScreen('search')} style={{ background: accent, border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>🔍 探す</button>
+          <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>← 戻る</button>
+        </div>
+      </div>
+      <div style={{ padding: '20px' }}>
+        {pendingRequests.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px' }}>📩 フレンド申請</p>
+            {pendingRequests.map(r => (
+              <div key={r.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ fontSize: '36px' }}>👤</div>
+                  <div>
+                    <p style={{ fontWeight: 'bold', color: text }}>{r.requester.display_name}</p>
+                    <p style={{ color: subtext, fontSize: '13px' }}>@{r.requester.username}</p>
+                  </div>
+                </div>
+                <button onClick={() => acceptFriendRequest(r.id, userId)} style={{ padding: '8px 16px', background: accent, border: 'none', borderRadius: '8px', color: 'white', cursor: 'pointer', fontSize: '14px' }}>承認</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {friends.length === 0 && pendingRequests.length === 0 && (
+          <div style={{ textAlign: 'center', marginTop: '60px' }}>
+            <p style={{ fontSize: '48px', marginBottom: '16px' }}>👥</p>
+            <p style={{ color: text, opacity: 0.6 }}>まだ友達がいません</p>
+            <p style={{ color: subtext, fontSize: '13px', marginTop: '8px' }}>「探す」から友達を見つけよう</p>
+          </div>
+        )}
+        {friends.map(f => (
+          <div key={f.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+            <div style={{ fontSize: '36px' }}>👤</div>
+            <div>
+              <p style={{ fontWeight: 'bold', color: text }}>{f.display_name}</p>
+              <p style={{ color: subtext, fontSize: '13px' }}>@{f.username}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+
+  if (screen === 'search') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
+      <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>🔍 ユーザー検索</h2>
+        <button onClick={() => setScreen('friends')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>← 戻る</button>
+      </div>
+      <div style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchUsers()} placeholder="ユーザーIDで検索" style={{ ...inputCls, flex: 1 }} />
+          <button onClick={searchUsers} style={{ padding: '12px 20px', background: accent, border: 'none', borderRadius: '12px', color: 'white', cursor: 'pointer', fontSize: '16px' }}>検索</button>
+        </div>
+        {searchResults.map(u => (
+          <div key={u.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ fontSize: '36px' }}>👤</div>
+              <div>
+                <p style={{ fontWeight: 'bold', color: text }}>{u.display_name}</p>
+                <p style={{ color: subtext, fontSize: '13px' }}>@{u.username}</p>
+              </div>
+            </div>
+            <button onClick={() => sendFriendRequest(u.id)} style={{ padding: '8px 16px', background: accent, border: 'none', borderRadius: '8px', color: 'white', cursor: 'pointer', fontSize: '14px' }}>申請</button>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+
+  if (screen === 'camera') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, fontFamily: 'sans-serif', padding: '20px' }}>
+      <div style={{ background: card, borderRadius: '24px', padding: '40px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)', textAlign: 'center' }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>📷</div>
+        <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '8px', color: accent }}>今日の1枚</h2>
+        <p style={{ color: subtext, fontSize: '13px', marginBottom: '24px' }}>この写真は今日だけ見られます</p>
+        <input type="file" accept="image/*" capture="environment"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const { data: session } = await supabase.auth.getSession();
+            if (!session.session) return;
+            const uid = session.session.user.id;
+            const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
+            const { error } = await supabase.storage.from('posts').upload(path, file, { upsert: true });
+            if (error) { alert('アップロード失敗: ' + error.message); return; }
+            const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
+            await supabase.from('posts').upsert({ user_id: uid, image_url: urlData.publicUrl, posted_at: new Date().toISOString().split('T')[0] });
+            await fetchTodayPost(uid);
+            setScreen('home');
+          }}
+          style={{ display: 'none' }} id="camera-input"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        <label htmlFor="camera-input" style={{ display: 'inline-block', padding: '16px 40px', fontSize: '18px', background: accent, borderRadius: '50px', cursor: 'pointer', color: 'white', boxShadow: `0 4px 16px ${accent}44` }}>
+          📷 写真を選ぶ・撮る
+        </label>
+        <br />
+        <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px', marginTop: '16px' }}>← 戻る</button>
+      </div>
+    </main>
+  );
+
+  return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
+      <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>📸 青春snap</h1>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => { setScreen('friends'); fetchFriends(userId); fetchPendingRequests(userId); }} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>👥 友達</button>
+          <button onClick={logout} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>ログアウト</button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', width: '100%', maxWidth: '360px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', borderRadius: '12px', padding: '4px' }}>
+          <button onClick={() => setActiveTab('mypost')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'mypost' ? accent : 'transparent', color: activeTab === 'mypost' ? 'white' : subtext }}>📸 マイ投稿</button>
+          <button onClick={() => setActiveTab('friends')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'friends' ? accent : 'transparent', color: activeTab === 'friends' ? 'white' : subtext }}>👥 友達</button>
         </div>
-      </main>
-    </div>
+        <p style={{ color: subtext, fontSize: '13px', marginBottom: '20px' }}>@{username}</p>
+        {activeTab === 'mypost' && todayPost && (
+          <div style={{ marginBottom: '24px', width: '100%', maxWidth: '360px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+            <img src={todayPost.image_url} style={{ width: '100%' }} />
+            <p style={{ color: subtext, fontSize: '13px', padding: '12px', textAlign: 'center' }}>今日の1枚 ✨</p>
+          </div>
+        )}
+        {activeTab === 'friends' && friendsPosts.length > 0 && (
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '24px' }}>
+            <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px' }}>👥 友達の今日</p>
+            {friendsPosts.map((post, i) => (
+              <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+                <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📸 {post.display_name}</p>
+                <img src={post.image_url} style={{ width: '100%' }} />
+              </div>
+            ))}
+          </div>
+        )}
+        {activeTab === 'friends' && friendsPosts.length === 0 && (
+          <div style={{ textAlign: 'center', marginTop: '40px' }}>
+            <p style={{ fontSize: '48px', marginBottom: '16px' }}>👥</p>
+            <p style={{ color: text, opacity: 0.6 }}>友達の今日の投稿はまだありません</p>
+          </div>
+        )}
+        {activeTab === 'mypost' && !todayPost && (
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <div style={{ fontSize: '72px', marginBottom: '16px' }}>📷</div>
+            <p style={{ color: text, opacity: 0.7, marginBottom: '8px' }}>今日の1枚を撮ろう</p>
+            <p style={{ color: subtext, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
+          </div>
+        )}
+        {activeTab === 'mypost' && (
+          <button onClick={() => setScreen('camera')} style={{ ...btnCls(), width: 'auto', padding: '16px 40px', fontSize: '18px', borderRadius: '50px', marginTop: '8px' }}>
+            📸 撮影する
+          </button>
+        )}
+      </div>
+    </main>
   );
 }
