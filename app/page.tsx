@@ -54,7 +54,20 @@ export default function Home() {
       .eq('status', 'pending');
     if (data) setPendingRequests(data);
   };
+const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
+const [isGraduated, setIsGraduated] = useState(false);
 
+const checkGraduation = async (uid: string) => {
+  const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
+  if (!user?.graduation_date) return;
+  const today = new Date();
+  const gradDate = new Date(user.graduation_date);
+  if (today >= gradDate) {
+    setIsGraduated(true);
+    const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
+    if (posts) setAllPosts(posts);
+  }
+};
   const fetchFriendsPosts = async (uid: string) => {
     const { data: friendships } = await supabase
       .from('friendships')
@@ -105,6 +118,7 @@ export default function Home() {
           setUserId(data.session.user.id);
           await fetchTodayPost(data.session.user.id);
           await fetchFriendsPosts(data.session.user.id);
+          await checkGraduation(data.session.user.id);
           setScreen('home');
         } else {
           setScreen('setup');
@@ -117,20 +131,26 @@ export default function Home() {
     setLoading(true); setError('');
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
-    setScreen('setup');
-    setLoading(false);
+    alert('メールに確認リンクを送りました。確認後にログインしてください。');
+setScreen('login');
+setLoading(false);
   };
 
   const login = async () => {
     setLoading(true); setError('');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setError(error.message); setLoading(false); return; }
+    if (error) { 
+  setError(error.message.includes('Email not confirmed') ? 'メールの確認が完了していません。メールを確認してください。' : error.message); 
+  setLoading(false); 
+  return; 
+}
     const { data: user } = await supabase.from('users').select('*').eq('id', data.user.id).single();
     if (user?.username) {
       setUsername(user.username);
       setUserId(data.user.id);
       await fetchTodayPost(data.user.id);
       await fetchFriendsPosts(data.user.id);
+      await checkGraduation(data.user.id);
       setScreen('home');
     } else {
       setScreen('setup');
@@ -382,6 +402,21 @@ export default function Home() {
             <p style={{ color: subtext, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
           </div>
         )}
+        {isGraduated && (
+  <div style={{ width: '100%', maxWidth: '360px', marginBottom: '24px' }}>
+    <div style={{ background: 'linear-gradient(135deg, #ffd700, #ff8c00)', borderRadius: '20px', padding: '20px', textAlign: 'center', marginBottom: '16px', boxShadow: '0 4px 16px rgba(255,215,0,0.3)' }}>
+      <p style={{ fontSize: '32px', marginBottom: '8px' }}>🎓</p>
+      <p style={{ fontWeight: 'bold', color: 'white', fontSize: '18px', marginBottom: '4px' }}>卒業おめでとう！</p>
+      <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>青春の記録が全部解放されました</p>
+    </div>
+    {allPosts.map((post, i) => (
+      <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+        <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📅 {post.posted_at}</p>
+        <img src={post.image_url} style={{ width: '100%' }} />
+      </div>
+    ))}
+  </div>
+)}
         {activeTab === 'mypost' && (
           <button onClick={() => setScreen('camera')} style={{ ...btnCls(), width: 'auto', padding: '16px 40px', fontSize: '18px', borderRadius: '50px', marginTop: '8px' }}>
             📸 撮影する
