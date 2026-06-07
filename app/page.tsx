@@ -56,7 +56,11 @@ export default function Home() {
   };
 const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
 const [isGraduated, setIsGraduated] = useState(false);
-
+const [postedDates, setPostedDates] = useState<string[]>([]);
+const fetchPostedDates = async (uid: string) => {
+  const { data } = await supabase.from('posts').select('posted_at').eq('user_id', uid);
+  if (data) setPostedDates(data.map(p => p.posted_at));
+};
 const checkGraduation = async (uid: string) => {
   const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
   if (!user?.graduation_date) return;
@@ -119,6 +123,7 @@ const checkGraduation = async (uid: string) => {
           await fetchTodayPost(data.session.user.id);
           await fetchFriendsPosts(data.session.user.id);
           await checkGraduation(data.session.user.id);
+          await fetchPostedDates(data.session.user.id);
           setScreen('home');
         } else {
           setScreen('setup');
@@ -151,6 +156,7 @@ setLoading(false);
       await fetchTodayPost(data.user.id);
       await fetchFriendsPosts(data.user.id);
       await checkGraduation(data.user.id);
+      await fetchPostedDates(data.user.id);
       setScreen('home');
     } else {
       setScreen('setup');
@@ -372,6 +378,40 @@ setLoading(false);
           <button onClick={() => setActiveTab('friends')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'friends' ? accent : 'transparent', color: activeTab === 'friends' ? 'white' : subtext }}>👥 友達</button>
         </div>
         <p style={{ color: subtext, fontSize: '13px', marginBottom: '20px' }}>@{username}</p>
+        {activeTab === 'mypost' && (
+  <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', background: card, borderRadius: '20px', padding: '16px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+    <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px', fontSize: '14px' }}>
+      📅 {new Date().getFullYear()}年{new Date().getMonth() + 1}月
+    </p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+      {['日','月','火','水','木','金','土'].map(d => (
+        <div key={d} style={{ fontSize: '11px', color: subtext, paddingBottom: '4px' }}>{d}</div>
+      ))}
+      {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() }, (_, i) => (
+        <div key={`empty-${i}`} />
+      ))}
+      {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() }, (_, i) => {
+        const day = i + 1;
+        const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasPost = postedDates.includes(dateStr);
+        const isToday = day === new Date().getDate();
+        return (
+          <div key={day} style={{
+            padding: '4px 0',
+            fontSize: '12px',
+            borderRadius: '50%',
+            background: hasPost ? accent : isToday ? 'rgba(2,136,209,0.1)' : 'transparent',
+            color: hasPost ? 'white' : isToday ? accent : text,
+            fontWeight: isToday ? 'bold' : 'normal',
+          }}>{day}</div>
+        );
+      })}
+    </div>
+    <p style={{ color: subtext, fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
+      今月 {postedDates.filter(d => d.startsWith(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)).length}日投稿済み 🌟
+    </p>
+  </div>
+)}
         {activeTab === 'mypost' && todayPost && (
           <div style={{ marginBottom: '24px', width: '100%', maxWidth: '360px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
             <img src={todayPost.image_url} style={{ width: '100%' }} />
