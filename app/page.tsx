@@ -249,7 +249,7 @@ export default function Home() {
       <button onClick={() => setScreen('camera')} style={{ background: accent, border: 'none', cursor: 'pointer', width: '56px', height: '56px', borderRadius: '50%', fontSize: '24px', marginTop: '-20px', boxShadow: `0 4px 16px ${accent}66` }}>
         📷
       </button>
-      <button onClick={() => { setActiveTab('friends'); setScreen('home'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'home' && activeTab === 'friends' ? accent : subtext }}>
+      <button onClick={() => { setActiveTab('friends'); setScreen('home'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: (screen === 'home' && activeTab === 'friends') || screen === 'friends' || screen === 'search' ? accent : subtext }}>
         <span style={{ fontSize: '24px' }}>👥</span>
         <span style={{ fontSize: '10px' }}>友達</span>
       </button>
