@@ -409,6 +409,39 @@ export default function Home() {
             </div>
           </div>
         ))}
+        {friendsPosts.length > 0 && (
+          <div style={{ marginTop: '24px' }}>
+            <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px' }}>📸 友達の今日</p>
+            {friendsPosts.map((post, i) => (
+              <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+                <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📸 {post.display_name}</p>
+                <img src={post.image_url} style={{ width: '100%' }} />
+                <div style={{ padding: '8px 16px 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px' }}>
+                    {likes.find(l => l.post_id === post.id)?.liked ? '❤️' : '🤍'}
+                  </button>
+                  <span style={{ color: subtext, fontSize: '13px' }}>{likes.find(l => l.post_id === post.id)?.count || 0}</span>
+                  <button onClick={() => setOpenComments(openComments === post.id ? null : post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', marginLeft: '4px' }}>💬</button>
+                  <span style={{ color: subtext, fontSize: '13px' }}>{(comments[post.id] || []).length}</span>
+                </div>
+                {openComments === post.id && (
+                  <div style={{ padding: '0 16px 12px' }}>
+                    {(comments[post.id] || []).map(c => (
+                      <div key={c.id} style={{ marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '12px', color: accent }}>{c.display_name} </span>
+                        <span style={{ fontSize: '13px', color: text }}>{c.content}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <input value={commentInput[post.id] || ''} onChange={e => setCommentInput(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addComment(post.id)} placeholder="コメントを入力..." style={{ flex: 1, padding: '8px 12px', fontSize: '13px', borderRadius: '20px', border: `1px solid ${subtext}`, background: 'rgba(255,255,255,0.9)', color: text, outline: 'none' }} />
+                      <button onClick={() => addComment(post.id)} style={{ background: accent, border: 'none', borderRadius: '20px', padding: '8px 14px', color: 'white', cursor: 'pointer', fontSize: '13px' }}>送信</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <BottomNav />
     </main>
