@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friends' | 'search';
+type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friends' | 'search' | 'profile';
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('top');
@@ -169,6 +169,8 @@ export default function Home() {
         const { data: user } = await supabase.from('users').select('*').eq('id', data.session.user.id).single();
         if (user?.username) {
           setUsername(user.username);
+          setDisplayName(user.display_name ?? '');
+          setSchool(user.school ?? '');
           setUserId(data.session.user.id);
           await fetchTodayPost(data.session.user.id);
           await fetchFriendsPosts(data.session.user.id);
@@ -201,7 +203,7 @@ export default function Home() {
     }
     const { data: user } = await supabase.from('users').select('*').eq('id', data.user.id).single();
     if (user?.username) {
-      setUsername(user.username); setUserId(data.user.id);
+      setUsername(user.username); setDisplayName(user.display_name ?? ''); setSchool(user.school ?? ''); setUserId(data.user.id);
       await fetchTodayPost(data.user.id);
       await fetchFriendsPosts(data.user.id);
       await checkGraduation(data.user.id);
@@ -256,6 +258,10 @@ export default function Home() {
       <button onClick={() => { fetchFriends(userId); fetchPendingRequests(userId); setScreen('friends'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'friends' || screen === 'search' ? accent : subtext }}>
         <span style={{ fontSize: '24px' }}>👥</span>
         <span style={{ fontSize: '10px' }}>友達</span>
+      </button>
+      <button onClick={() => setScreen('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'profile' ? accent : subtext }}>
+        <span style={{ fontSize: '24px' }}>👤</span>
+        <span style={{ fontSize: '10px' }}>プロフィール</span>
       </button>
     </div>
   );
@@ -383,6 +389,40 @@ export default function Home() {
           </div>
         ))}
       </div>
+    </main>
+  );
+
+  if (screen === 'profile') return (
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif', paddingBottom: '80px' }}>
+      <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)` }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>👤 プロフィール</h2>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 20px', gap: '20px' }}>
+        <div style={{ width: '96px', height: '96px', borderRadius: '50%', background: `linear-gradient(135deg, ${accent}, #4fc3f7)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', boxShadow: `0 4px 16px ${accent}44` }}>
+          {displayName ? displayName[0] : '?'}
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontWeight: 'bold', fontSize: '22px', color: text }}>{displayName}</p>
+          <p style={{ color: subtext, fontSize: '14px', marginTop: '4px' }}>@{username}</p>
+          {school && <p style={{ color: text, fontSize: '14px', marginTop: '6px', opacity: 0.7 }}>🏫 {school}</p>}
+        </div>
+        <div style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '360px' }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.8)', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+            <p style={{ fontSize: '28px', fontWeight: 'bold', color: accent }}>{postedDates.length}</p>
+            <p style={{ fontSize: '12px', color: subtext, marginTop: '4px' }}>投稿数</p>
+          </div>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.8)', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+            <p style={{ fontSize: '28px', fontWeight: 'bold', color: accent }}>{streak}</p>
+            <p style={{ fontSize: '12px', color: subtext, marginTop: '4px' }}>連続投稿</p>
+          </div>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.8)', borderRadius: '16px', padding: '16px', textAlign: 'center', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+            <p style={{ fontSize: '28px', fontWeight: 'bold', color: accent }}>{friends.length}</p>
+            <p style={{ fontSize: '12px', color: subtext, marginTop: '4px' }}>友達</p>
+          </div>
+        </div>
+        <button onClick={logout} style={{ ...btnCls('#e53935'), width: '100%', maxWidth: '360px', marginTop: '8px' }}>ログアウト</button>
+      </div>
+      <BottomNav />
     </main>
   );
 
