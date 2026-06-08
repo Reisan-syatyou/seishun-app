@@ -180,6 +180,10 @@ export default function Home() {
     });
   }, []);
 
+  useEffect(() => {
+    if (screen === 'camera' && todayPost) setScreen('home');
+  }, [screen, todayPost]);
+
   const register = async () => {
     setLoading(true); setError('');
     const { error } = await supabase.auth.signUp({ email, password });
@@ -383,7 +387,7 @@ export default function Home() {
   );
 
   if (screen === 'camera') {
-    if (todayPost) { setScreen('home'); return null; }
+    if (todayPost) return null;
     return (
       <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, fontFamily: 'sans-serif', padding: '20px' }}>
         <div style={{ background: card, borderRadius: '24px', padding: '40px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)', textAlign: 'center' }}>
