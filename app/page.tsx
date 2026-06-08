@@ -29,6 +29,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'mypost' | 'friends'>('mypost');
   const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
   const [isGraduated, setIsGraduated] = useState(false);
+  const [daysUntilGraduation, setDaysUntilGraduation] = useState<number | null>(null);
   const [postedDates, setPostedDates] = useState<string[]>([]);
   const [likes, setLikes] = useState<{post_id: string; count: number; liked: boolean}[]>([]);
   const [streak, setStreak] = useState(0);
@@ -112,12 +113,15 @@ export default function Home() {
   const checkGraduation = async (uid: string) => {
     const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
     if (!user?.graduation_date) return;
-    const today = new Date();
-    const gradDate = new Date(user.graduation_date);
-    if (today >= gradDate) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const gradDate = new Date(user.graduation_date); gradDate.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((gradDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff <= 0) {
       setIsGraduated(true);
       const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
       if (posts) setAllPosts(posts);
+    } else {
+      setDaysUntilGraduation(diff);
     }
   };
 
@@ -427,6 +431,22 @@ export default function Home() {
             <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', marginTop: '4px' }}>🔥 {streak}日連続投稿中！</p>
           )}
         </div>
+        {!isGraduated && daysUntilGraduation !== null && (
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '16px', background: 'rgba(255,255,255,0.7)', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ color: subtext, fontSize: '12px', marginBottom: '4px' }}>卒業まで</p>
+              <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', lineHeight: 1 }}>
+                あと <span style={{ fontSize: '36px' }}>{daysUntilGraduation}</span> 日
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ color: subtext, fontSize: '12px', marginBottom: '4px' }}>青春の記録</p>
+              <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', lineHeight: 1 }}>
+                <span style={{ fontSize: '36px' }}>{postedDates.length}</span> 枚
+              </p>
+            </div>
+          </div>
+        )}
         {activeTab === 'mypost' && (
           <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', background: card, borderRadius: '20px', padding: '16px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
             <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px', fontSize: '14px' }}>
