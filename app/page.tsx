@@ -25,8 +25,13 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{id: string; display_name: string; username: string}[]>([]);
   const [pendingRequests, setPendingRequests] = useState<{id: string; requester: {id: string; display_name: string; username: string}}[]>([]);
-  const [friendsPosts, setFriendsPosts] = useState<{image_url: string; user_id: string; display_name: string}[]>([]);
+  const [friendsPosts, setFriendsPosts] = useState<{id: string; image_url: string; user_id: string; display_name: string}[]>([]);
   const [activeTab, setActiveTab] = useState<'mypost' | 'friends'>('mypost');
+  const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
+  const [isGraduated, setIsGraduated] = useState(false);
+  const [postedDates, setPostedDates] = useState<string[]>([]);
+  const [streak, setStreak] = useState(0);
+  const [likes, setLikes] = useState<{post_id: string; count: number; liked: boolean}[]>([]);
 
   const fetchTodayPost = async (uid: string) => {
     const today = new Date().toISOString().split('T')[0];
@@ -54,24 +59,35 @@ export default function Home() {
       .eq('status', 'pending');
     if (data) setPendingRequests(data);
   };
-const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
-const [isGraduated, setIsGraduated] = useState(false);
-const [postedDates, setPostedDates] = useState<string[]>([]);
-const fetchPostedDates = async (uid: string) => {
-  const { data } = await supabase.from('posts').select('posted_at').eq('user_id', uid);
-  if (data) setPostedDates(data.map(p => p.posted_at));
-};
-const checkGraduation = async (uid: string) => {
-  const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
-  if (!user?.graduation_date) return;
-  const today = new Date();
-  const gradDate = new Date(user.graduation_date);
-  if (today >= gradDate) {
-    setIsGraduated(true);
-    const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
-    if (posts) setAllPosts(posts);
-  }
-};
+
+  const fetchLikes = async (uid: string, posts: {id: string}[]) => {
+    if (posts.length === 0) return;
+    const postIds = posts.map(p => p.id);
+    const { data } = await supabase.from('likes').select('*').in('post_id', postIds);
+    if (data) {
+      const likesData = postIds.map(pid => ({
+        post_id: pid,
+        count: data.filter(l => l.post_id === pid).length,
+        liked: data.some(l => l.post_id === pid && l.user_id === uid),
+      }));
+      setLikes(likesData);
+    }
+  };
+
+  const toggleLike = async (postId: string) => {
+    const existing = likes.find(l => l.post_id === postId);
+    if (existing?.liked) {
+      await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
+    } else {
+      await supabase.from('likes').insert({ user_id: userId, post_id: postId });
+    }
+    setLikes(prev => prev.map(l => l.post_id === postId ? {
+      ...l,
+      count: existing?.liked ? l.count - 1 : l.count + 1,
+      liked: !l.liked,
+    } : l));
+  };
+
   const fetchFriendsPosts = async (uid: string) => {
     const { data: friendships } = await supabase
       .from('friendships')
@@ -86,8 +102,46 @@ const checkGraduation = async (uid: string) => {
       .select('*, user:user_id(display_name)')
       .in('user_id', friendIds)
       .eq('posted_at', today);
-    if (posts) setFriendsPosts(posts.map(p => ({ ...p, display_name: p.user?.display_name || '' })));
+    if (posts) {
+      const mappedPosts = posts.map(p => ({ ...p, display_name: p.user?.display_name || '' }));
+      setFriendsPosts(mappedPosts);
+      await fetchLikes(uid, mappedPosts);
+    }
   };
+
+  const checkGraduation = async (uid: string) => {
+    const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
+    if (!user?.graduation_date) return;
+    const today = new Date();
+    const gradDate = new Date(user.graduation_date);
+    if (today >= gradDate) {
+      setIsGraduated(true);
+      const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
+      if (posts) setAllPosts(posts);
+    }
+  };
+
+  const fetchPostedDates = async (uid: string) => {
+  const { data } = await supabase.from('posts').select('posted_at').eq('user_id', uid).order('posted_at', { ascending: false });
+  if (data) {
+    const dates = data.map(p => p.posted_at);
+    setPostedDates(dates);
+    // ストリーク計算
+    let count = 0;
+    const today = new Date();
+    for (let i = 0; i < dates.length; i++) {
+      const expected = new Date(today);
+      expected.setDate(today.getDate() - i);
+      const expectedStr = expected.toISOString().split('T')[0];
+      if (dates[i] === expectedStr) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    setStreak(count);
+  }
+};
 
   const acceptFriendRequest = async (friendshipId: string, uid: string) => {
     await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
@@ -96,13 +150,14 @@ const checkGraduation = async (uid: string) => {
   };
 
   const searchUsers = async () => {
-    if (!searchQuery.trim()) return;
-    const { data } = await supabase
-      .from('users')
-      .select('id, display_name, username')
-      .ilike('username', `%${searchQuery}%`);
-    if (data) setSearchResults(data);
-  };
+  if (!searchQuery.trim()) return;
+  const { data } = await supabase
+    .from('users')
+    .select('id, display_name, username')
+    .ilike('username', `%${searchQuery}%`)
+    .neq('id', userId);
+  if (data) setSearchResults(data);
+};
 
   const sendFriendRequest = async (receiverId: string) => {
     await supabase.from('friendships').insert({
@@ -137,18 +192,17 @@ const checkGraduation = async (uid: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
     alert('メールに確認リンクを送りました。確認後にログインしてください。');
-setScreen('login');
-setLoading(false);
+    setScreen('login');
+    setLoading(false);
   };
 
   const login = async () => {
     setLoading(true); setError('');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { 
-  setError(error.message.includes('Email not confirmed') ? 'メールの確認が完了していません。メールを確認してください。' : error.message); 
-  setLoading(false); 
-  return; 
-}
+    if (error) {
+      setError(error.message.includes('Email not confirmed') ? 'メールの確認が完了していません。メールを確認してください。' : error.message);
+      setLoading(false); return;
+    }
     const { data: user } = await supabase.from('users').select('*').eq('id', data.user.id).single();
     if (user?.username) {
       setUsername(user.username);
@@ -159,6 +213,7 @@ setLoading(false);
       await fetchPostedDates(data.user.id);
       setScreen('home');
     } else {
+      setUserId(data.user.id);
       setScreen('setup');
     }
     setLoading(false);
@@ -183,6 +238,9 @@ setLoading(false);
     setUsername('');
     setTodayPost(null);
     setFriendsPosts([]);
+    setIsGraduated(false);
+    setAllPosts([]);
+    setLikes([]);
   };
 
   const bg = 'linear-gradient(160deg, #e0f7fa 0%, #b2ebf2 40%, #e0f2f1 100%)';
@@ -331,37 +389,41 @@ setLoading(false);
     </main>
   );
 
-  if (screen === 'camera') return (
-    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, fontFamily: 'sans-serif', padding: '20px' }}>
-      <div style={{ background: card, borderRadius: '24px', padding: '40px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)', textAlign: 'center' }}>
-        <div style={{ fontSize: '64px', marginBottom: '16px' }}>📷</div>
-        <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '8px', color: accent }}>今日の1枚</h2>
-        <p style={{ color: subtext, fontSize: '13px', marginBottom: '24px' }}>この写真は今日だけ見られます</p>
-        <input type="file" accept="image/*" capture="environment"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const { data: session } = await supabase.auth.getSession();
-            if (!session.session) return;
-            const uid = session.session.user.id;
-            const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
-            const { error } = await supabase.storage.from('posts').upload(path, file, { upsert: true });
-            if (error) { alert('アップロード失敗: ' + error.message); return; }
-            const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
-            await supabase.from('posts').upsert({ user_id: uid, image_url: urlData.publicUrl, posted_at: new Date().toISOString().split('T')[0] });
-            await fetchTodayPost(uid);
-            setScreen('home');
-          }}
-          style={{ display: 'none' }} id="camera-input"
-        />
-        <label htmlFor="camera-input" style={{ display: 'inline-block', padding: '16px 40px', fontSize: '18px', background: accent, borderRadius: '50px', cursor: 'pointer', color: 'white', boxShadow: `0 4px 16px ${accent}44` }}>
-          📷 写真を選ぶ・撮る
-        </label>
-        <br />
-        <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px', marginTop: '16px' }}>← 戻る</button>
-      </div>
-    </main>
-  );
+  if (screen === 'camera') {
+    if (todayPost) { setScreen('home'); return null; }
+    return (
+      <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, fontFamily: 'sans-serif', padding: '20px' }}>
+        <div style={{ background: card, borderRadius: '24px', padding: '40px', boxShadow: '0 8px 32px rgba(2,136,209,0.1)', textAlign: 'center' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>📷</div>
+          <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '8px', color: accent }}>今日の1枚</h2>
+          <p style={{ color: subtext, fontSize: '13px', marginBottom: '24px' }}>この写真は今日だけ見られます</p>
+          <input type="file" accept="image/*" capture="environment"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const { data: session } = await supabase.auth.getSession();
+              if (!session.session) return;
+              const uid = session.session.user.id;
+              const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
+              const { error } = await supabase.storage.from('posts').upload(path, file, { upsert: true });
+              if (error) { alert('アップロード失敗: ' + error.message); return; }
+              const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
+              await supabase.from('posts').upsert({ user_id: uid, image_url: urlData.publicUrl, posted_at: new Date().toISOString().split('T')[0] });
+              await fetchTodayPost(uid);
+              await fetchPostedDates(uid);
+              setScreen('home');
+            }}
+            style={{ display: 'none' }} id="camera-input"
+          />
+          <label htmlFor="camera-input" style={{ display: 'inline-block', padding: '16px 40px', fontSize: '18px', background: accent, borderRadius: '50px', cursor: 'pointer', color: 'white', boxShadow: `0 4px 16px ${accent}44` }}>
+            📷 写真を選ぶ・撮る
+          </label>
+          <br />
+          <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px', marginTop: '16px' }}>← 戻る</button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
@@ -377,41 +439,56 @@ setLoading(false);
           <button onClick={() => setActiveTab('mypost')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'mypost' ? accent : 'transparent', color: activeTab === 'mypost' ? 'white' : subtext }}>📸 マイ投稿</button>
           <button onClick={() => setActiveTab('friends')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'friends' ? accent : 'transparent', color: activeTab === 'friends' ? 'white' : subtext }}>👥 友達</button>
         </div>
-        <p style={{ color: subtext, fontSize: '13px', marginBottom: '20px' }}>@{username}</p>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+  <p style={{ color: subtext, fontSize: '13px' }}>@{username}</p>
+  {streak > 0 && (
+    <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', marginTop: '4px' }}>
+      🔥 {streak}日連続投稿中！
+    </p>
+  )}
+</div>
         {activeTab === 'mypost' && (
-  <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', background: card, borderRadius: '20px', padding: '16px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
-    <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px', fontSize: '14px' }}>
-      📅 {new Date().getFullYear()}年{new Date().getMonth() + 1}月
-    </p>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
-      {['日','月','火','水','木','金','土'].map(d => (
-        <div key={d} style={{ fontSize: '11px', color: subtext, paddingBottom: '4px' }}>{d}</div>
-      ))}
-      {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() }, (_, i) => (
-        <div key={`empty-${i}`} />
-      ))}
-      {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() }, (_, i) => {
-        const day = i + 1;
-        const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const hasPost = postedDates.includes(dateStr);
-        const isToday = day === new Date().getDate();
-        return (
-          <div key={day} style={{
-            padding: '4px 0',
-            fontSize: '12px',
-            borderRadius: '50%',
-            background: hasPost ? accent : isToday ? 'rgba(2,136,209,0.1)' : 'transparent',
-            color: hasPost ? 'white' : isToday ? accent : text,
-            fontWeight: isToday ? 'bold' : 'normal',
-          }}>{day}</div>
-        );
-      })}
-    </div>
-    <p style={{ color: subtext, fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
-      今月 {postedDates.filter(d => d.startsWith(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)).length}日投稿済み 🌟
-    </p>
-  </div>
-)}
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', background: card, borderRadius: '20px', padding: '16px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+            <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px', fontSize: '14px' }}>
+              📅 {new Date().getFullYear()}年{new Date().getMonth() + 1}月
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+              {['日','月','火','水','木','金','土'].map(d => (
+                <div key={d} style={{ fontSize: '11px', color: subtext, paddingBottom: '4px' }}>{d}</div>
+              ))}
+              {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay() }, (_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+              {Array.from({ length: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() }, (_, i) => {
+                const day = i + 1;
+                const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const hasPost = postedDates.includes(dateStr);
+                const isToday = day === new Date().getDate();
+                return (
+                  <div key={day} style={{ padding: '4px 0', fontSize: '12px', borderRadius: '50%', background: hasPost ? accent : isToday ? 'rgba(2,136,209,0.1)' : 'transparent', color: hasPost ? 'white' : isToday ? accent : text, fontWeight: isToday ? 'bold' : 'normal' }}>{day}</div>
+                );
+              })}
+            </div>
+            <p style={{ color: subtext, fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
+              今月 {postedDates.filter(d => d.startsWith(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)).length}日投稿済み 🌟
+            </p>
+          </div>
+        )}
+        {isGraduated && (
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '24px' }}>
+            <div style={{ background: 'linear-gradient(135deg, #ffd700, #ff8c00)', borderRadius: '20px', padding: '20px', textAlign: 'center', marginBottom: '16px', boxShadow: '0 4px 16px rgba(255,215,0,0.3)' }}>
+              <p style={{ fontSize: '32px', marginBottom: '8px' }}>🎓</p>
+              <p style={{ fontWeight: 'bold', color: 'white', fontSize: '18px', marginBottom: '4px' }}>卒業おめでとう！</p>
+              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>青春の記録が全部解放されました</p>
+            </div>
+            {allPosts.map((post, i) => (
+              <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
+                <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📅 {post.posted_at}</p>
+                <img src={post.image_url} style={{ width: '100%' }} />
+              </div>
+            ))}
+          </div>
+        )}
         {activeTab === 'mypost' && todayPost && (
           <div style={{ marginBottom: '24px', width: '100%', maxWidth: '360px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
             <img src={todayPost.image_url} style={{ width: '100%' }} />
@@ -425,6 +502,14 @@ setLoading(false);
               <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
                 <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📸 {post.display_name}</p>
                 <img src={post.image_url} style={{ width: '100%' }} />
+                <div style={{ padding: '8px 16px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px' }}>
+                    {likes.find(l => l.post_id === post.id)?.liked ? '❤️' : '🤍'}
+                  </button>
+                  <span style={{ color: subtext, fontSize: '13px' }}>
+                    {likes.find(l => l.post_id === post.id)?.count || 0}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
@@ -435,29 +520,14 @@ setLoading(false);
             <p style={{ color: text, opacity: 0.6 }}>友達の今日の投稿はまだありません</p>
           </div>
         )}
-        {activeTab === 'mypost' && !todayPost && (
+        {activeTab === 'mypost' && !todayPost && !isGraduated && (
           <div style={{ textAlign: 'center', marginTop: '20px' }}>
             <div style={{ fontSize: '72px', marginBottom: '16px' }}>📷</div>
             <p style={{ color: text, opacity: 0.7, marginBottom: '8px' }}>今日の1枚を撮ろう</p>
             <p style={{ color: subtext, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
           </div>
         )}
-        {isGraduated && (
-  <div style={{ width: '100%', maxWidth: '360px', marginBottom: '24px' }}>
-    <div style={{ background: 'linear-gradient(135deg, #ffd700, #ff8c00)', borderRadius: '20px', padding: '20px', textAlign: 'center', marginBottom: '16px', boxShadow: '0 4px 16px rgba(255,215,0,0.3)' }}>
-      <p style={{ fontSize: '32px', marginBottom: '8px' }}>🎓</p>
-      <p style={{ fontWeight: 'bold', color: 'white', fontSize: '18px', marginBottom: '4px' }}>卒業おめでとう！</p>
-      <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>青春の記録が全部解放されました</p>
-    </div>
-    {allPosts.map((post, i) => (
-      <div key={i} style={{ marginBottom: '16px', background: card, borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
-        <p style={{ color: subtext, fontSize: '13px', padding: '12px 16px 8px' }}>📅 {post.posted_at}</p>
-        <img src={post.image_url} style={{ width: '100%' }} />
-      </div>
-    ))}
-  </div>
-)}
-        {activeTab === 'mypost' && (
+        {activeTab === 'mypost' && !todayPost && (
           <button onClick={() => setScreen('camera')} style={{ ...btnCls(), width: 'auto', padding: '16px 40px', fontSize: '18px', borderRadius: '50px', marginTop: '8px' }}>
             📸 撮影する
           </button>
