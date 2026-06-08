@@ -30,8 +30,8 @@ export default function Home() {
   const [allPosts, setAllPosts] = useState<{image_url: string; posted_at: string}[]>([]);
   const [isGraduated, setIsGraduated] = useState(false);
   const [postedDates, setPostedDates] = useState<string[]>([]);
-  const [streak, setStreak] = useState(0);
   const [likes, setLikes] = useState<{post_id: string; count: number; liked: boolean}[]>([]);
+  const [streak, setStreak] = useState(0);
 
   const fetchTodayPost = async (uid: string) => {
     const today = new Date().toISOString().split('T')[0];
@@ -122,26 +122,21 @@ export default function Home() {
   };
 
   const fetchPostedDates = async (uid: string) => {
-  const { data } = await supabase.from('posts').select('posted_at').eq('user_id', uid).order('posted_at', { ascending: false });
-  if (data) {
-    const dates = data.map(p => p.posted_at);
-    setPostedDates(dates);
-    // ストリーク計算
-    let count = 0;
-    const today = new Date();
-    for (let i = 0; i < dates.length; i++) {
-      const expected = new Date(today);
-      expected.setDate(today.getDate() - i);
-      const expectedStr = expected.toISOString().split('T')[0];
-      if (dates[i] === expectedStr) {
-        count++;
-      } else {
-        break;
+    const { data } = await supabase.from('posts').select('posted_at').eq('user_id', uid).order('posted_at', { ascending: false });
+    if (data) {
+      const dates = data.map(p => p.posted_at);
+      setPostedDates(dates);
+      let count = 0;
+      const today = new Date();
+      for (let i = 0; i < dates.length; i++) {
+        const expected = new Date(today);
+        expected.setDate(today.getDate() - i);
+        const expectedStr = expected.toISOString().split('T')[0];
+        if (dates[i] === expectedStr) { count++; } else { break; }
       }
+      setStreak(count);
     }
-    setStreak(count);
-  }
-};
+  };
 
   const acceptFriendRequest = async (friendshipId: string, uid: string) => {
     await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
@@ -150,21 +145,17 @@ export default function Home() {
   };
 
   const searchUsers = async () => {
-  if (!searchQuery.trim()) return;
-  const { data } = await supabase
-    .from('users')
-    .select('id, display_name, username')
-    .ilike('username', `%${searchQuery}%`)
-    .neq('id', userId);
-  if (data) setSearchResults(data);
-};
+    if (!searchQuery.trim()) return;
+    const { data } = await supabase
+      .from('users')
+      .select('id, display_name, username')
+      .ilike('username', `%${searchQuery}%`)
+      .neq('id', userId);
+    if (data) setSearchResults(data);
+  };
 
   const sendFriendRequest = async (receiverId: string) => {
-    await supabase.from('friendships').insert({
-      requester_id: userId,
-      receiver_id: receiverId,
-      status: 'pending',
-    });
+    await supabase.from('friendships').insert({ requester_id: userId, receiver_id: receiverId, status: 'pending' });
     alert('フレンド申請を送りました！');
   };
 
@@ -180,9 +171,7 @@ export default function Home() {
           await checkGraduation(data.session.user.id);
           await fetchPostedDates(data.session.user.id);
           setScreen('home');
-        } else {
-          setScreen('setup');
-        }
+        } else { setScreen('setup'); }
       }
     });
   }, []);
@@ -192,30 +181,25 @@ export default function Home() {
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
     alert('メールに確認リンクを送りました。確認後にログインしてください。');
-    setScreen('login');
-    setLoading(false);
+    setScreen('login'); setLoading(false);
   };
 
   const login = async () => {
     setLoading(true); setError('');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      setError(error.message.includes('Email not confirmed') ? 'メールの確認が完了していません。メールを確認してください。' : error.message);
+      setError(error.message.includes('Email not confirmed') ? 'メールの確認が完了していません。' : error.message);
       setLoading(false); return;
     }
     const { data: user } = await supabase.from('users').select('*').eq('id', data.user.id).single();
     if (user?.username) {
-      setUsername(user.username);
-      setUserId(data.user.id);
+      setUsername(user.username); setUserId(data.user.id);
       await fetchTodayPost(data.user.id);
       await fetchFriendsPosts(data.user.id);
       await checkGraduation(data.user.id);
       await fetchPostedDates(data.user.id);
       setScreen('home');
-    } else {
-      setUserId(data.user.id);
-      setScreen('setup');
-    }
+    } else { setUserId(data.user.id); setScreen('setup'); }
     setLoading(false);
   };
 
@@ -223,28 +207,18 @@ export default function Home() {
     if (!username || !displayName || !graduationDate) { setError('すべて入力してください'); return; }
     const { data } = await supabase.auth.getSession();
     if (!data.session) return;
-    await supabase.from('users').upsert({
-      id: data.session.user.id,
-      username, display_name: displayName,
-      school, graduation_date: graduationDate,
-    });
+    await supabase.from('users').upsert({ id: data.session.user.id, username, display_name: displayName, school, graduation_date: graduationDate });
     setUserId(data.session.user.id);
     setScreen('home');
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setScreen('top');
-    setUsername('');
-    setTodayPost(null);
-    setFriendsPosts([]);
-    setIsGraduated(false);
-    setAllPosts([]);
-    setLikes([]);
+    setScreen('top'); setUsername(''); setTodayPost(null); setFriendsPosts([]); setIsGraduated(false); setAllPosts([]); setLikes([]);
   };
 
   const bg = 'linear-gradient(160deg, #e0f7fa 0%, #b2ebf2 40%, #e0f2f1 100%)';
-  const card = 'rgba(255,255,255,0.7)';
+  const card = 'rgba(255,255,255,0.85)';
   const accent = '#0288d1';
   const text = '#01579b';
   const subtext = '#4fc3f7';
@@ -260,6 +234,23 @@ export default function Home() {
     borderRadius: '12px', border: 'none', background: color,
     color: 'white', cursor: 'pointer', boxShadow: `0 4px 12px ${color}44`,
   });
+
+  // ボトムナビ
+  const BottomNav = () => (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderTop: `1px solid rgba(2,136,209,0.1)`, display: 'flex', justifyContent: 'space-around', padding: '8px 0 20px', zIndex: 100 }}>
+      <button onClick={() => { setActiveTab('mypost'); setScreen('home'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'home' && activeTab === 'mypost' ? accent : subtext }}>
+        <span style={{ fontSize: '24px' }}>📸</span>
+        <span style={{ fontSize: '10px' }}>マイ投稿</span>
+      </button>
+      <button onClick={() => setScreen('camera')} style={{ background: accent, border: 'none', cursor: 'pointer', width: '56px', height: '56px', borderRadius: '50%', fontSize: '24px', marginTop: '-20px', boxShadow: `0 4px 16px ${accent}66` }}>
+        📷
+      </button>
+      <button onClick={() => { setActiveTab('friends'); setScreen('home'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'home' && activeTab === 'friends' ? accent : subtext }}>
+        <span style={{ fontSize: '24px' }}>👥</span>
+        <span style={{ fontSize: '10px' }}>友達</span>
+      </button>
+    </div>
+  );
 
   if (screen === 'top') return (
     <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: text, padding: '20px', fontFamily: 'sans-serif' }}>
@@ -316,20 +307,17 @@ export default function Home() {
   );
 
   if (screen === 'friends') return (
-    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif', paddingBottom: '80px' }}>
       <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>👥 友達</h2>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={() => setScreen('search')} style={{ background: accent, border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>🔍 探す</button>
-          <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>← 戻る</button>
-        </div>
+        <button onClick={() => setScreen('search')} style={{ background: accent, border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>🔍 探す</button>
       </div>
       <div style={{ padding: '20px' }}>
         {pendingRequests.length > 0 && (
           <div style={{ marginBottom: '24px' }}>
             <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px' }}>📩 フレンド申請</p>
             {pendingRequests.map(r => (
-              <div key={r.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+              <div key={r.id} style={{ padding: '16px', background: card, borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ fontSize: '36px' }}>👤</div>
                   <div>
@@ -350,7 +338,7 @@ export default function Home() {
           </div>
         )}
         {friends.map(f => (
-          <div key={f.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+          <div key={f.id} style={{ padding: '16px', background: card, borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
             <div style={{ fontSize: '36px' }}>👤</div>
             <div>
               <p style={{ fontWeight: 'bold', color: text }}>{f.display_name}</p>
@@ -359,6 +347,7 @@ export default function Home() {
           </div>
         ))}
       </div>
+      <BottomNav />
     </main>
   );
 
@@ -374,7 +363,7 @@ export default function Home() {
           <button onClick={searchUsers} style={{ padding: '12px 20px', background: accent, border: 'none', borderRadius: '12px', color: 'white', cursor: 'pointer', fontSize: '16px' }}>検索</button>
         </div>
         {searchResults.map(u => (
-          <div key={u.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.8)', borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
+          <div key={u.id} style={{ padding: '16px', background: card, borderRadius: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(2,136,209,0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ fontSize: '36px' }}>👤</div>
               <div>
@@ -426,27 +415,18 @@ export default function Home() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif' }}>
+    <main style={{ minHeight: '100vh', background: bg, display: 'flex', flexDirection: 'column', color: text, fontFamily: 'sans-serif', paddingBottom: '80px' }}>
       <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: `1px solid rgba(2,136,209,0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: accent }}>📸 青春snap</h1>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={() => { setScreen('friends'); fetchFriends(userId); fetchPendingRequests(userId); }} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>👥 友達</button>
-          <button onClick={logout} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>ログアウト</button>
-        </div>
+        <button onClick={logout} style={{ background: 'none', border: 'none', color: subtext, cursor: 'pointer', fontSize: '14px' }}>ログアウト</button>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', width: '100%', maxWidth: '360px', marginBottom: '20px', background: 'rgba(255,255,255,0.6)', borderRadius: '12px', padding: '4px' }}>
-          <button onClick={() => setActiveTab('mypost')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'mypost' ? accent : 'transparent', color: activeTab === 'mypost' ? 'white' : subtext }}>📸 マイ投稿</button>
-          <button onClick={() => setActiveTab('friends')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', background: activeTab === 'friends' ? accent : 'transparent', color: activeTab === 'friends' ? 'white' : subtext }}>👥 友達</button>
-        </div>
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-  <p style={{ color: subtext, fontSize: '13px' }}>@{username}</p>
-  {streak > 0 && (
-    <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', marginTop: '4px' }}>
-      🔥 {streak}日連続投稿中！
-    </p>
-  )}
-</div>
+          <p style={{ color: subtext, fontSize: '13px' }}>@{username}</p>
+          {streak > 0 && (
+            <p style={{ color: accent, fontWeight: 'bold', fontSize: '14px', marginTop: '4px' }}>🔥 {streak}日連続投稿中！</p>
+          )}
+        </div>
         {activeTab === 'mypost' && (
           <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', background: card, borderRadius: '20px', padding: '16px', boxShadow: '0 4px 16px rgba(2,136,209,0.1)' }}>
             <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px', fontSize: '14px' }}>
@@ -527,12 +507,8 @@ export default function Home() {
             <p style={{ color: subtext, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
           </div>
         )}
-        {activeTab === 'mypost' && !todayPost && (
-          <button onClick={() => setScreen('camera')} style={{ ...btnCls(), width: 'auto', padding: '16px 40px', fontSize: '18px', borderRadius: '50px', marginTop: '8px' }}>
-            📸 撮影する
-          </button>
-        )}
       </div>
+      <BottomNav />
     </main>
   );
 }
