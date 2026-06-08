@@ -495,6 +495,11 @@ export default function Home() {
             <p style={{ color: subtext, fontSize: '13px', padding: '12px', textAlign: 'center' }}>今日の1枚 ✨</p>
           </div>
         )}
+        {activeTab === 'friends' && (
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => setScreen('search')} style={{ background: accent, border: 'none', color: 'white', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer', fontSize: '14px' }}>🔍 友達を探す</button>
+          </div>
+        )}
         {activeTab === 'friends' && friendsPosts.length > 0 && (
           <div style={{ width: '100%', maxWidth: '360px', marginBottom: '24px' }}>
             <p style={{ color: accent, fontWeight: 'bold', marginBottom: '12px' }}>👥 友達の今日</p>
