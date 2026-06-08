@@ -127,19 +127,22 @@ export default function Home() {
   };
 
   const fetchFriendsPosts = async (uid: string) => {
-    const { data: friendships } = await supabase
+    const { data: friendships, error: e1 } = await supabase
       .from('friendships')
       .select('requester_id, receiver_id')
       .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`)
       .eq('status', 'accepted');
+    console.log('[fetchFriendsPosts] friendships:', friendships, 'error:', e1);
     if (!friendships || friendships.length === 0) return;
     const friendIds = friendships.map(f => f.requester_id === uid ? f.receiver_id : f.requester_id);
     const today = new Date().toISOString().split('T')[0];
-    const { data: posts } = await supabase
+    console.log('[fetchFriendsPosts] friendIds:', friendIds, 'today:', today);
+    const { data: posts, error: e2 } = await supabase
       .from('posts')
       .select('*, user:user_id(display_name)')
       .in('user_id', friendIds)
       .eq('posted_at', today);
+    console.log('[fetchFriendsPosts] posts:', posts, 'error:', e2);
     if (posts) {
       const mappedPosts = posts.map(p => ({ ...p, display_name: p.user?.display_name || '' }));
       setFriendsPosts(mappedPosts);
