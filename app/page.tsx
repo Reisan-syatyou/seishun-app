@@ -176,6 +176,7 @@ export default function Home() {
           await fetchFriendsPosts(data.session.user.id);
           await checkGraduation(data.session.user.id);
           await fetchPostedDates(data.session.user.id);
+          await fetchPendingRequests(data.session.user.id);
           setScreen('home');
         } else { setScreen('setup'); }
       }
@@ -256,7 +257,14 @@ export default function Home() {
         📷
       </button>
       <button onClick={() => { fetchFriends(userId); fetchPendingRequests(userId); setScreen('friends'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'friends' || screen === 'search' ? accent : subtext }}>
-        <span style={{ fontSize: '24px' }}>👥</span>
+        <span style={{ fontSize: '24px', position: 'relative', display: 'inline-block' }}>
+          👥
+          {pendingRequests.length > 0 && (
+            <span style={{ position: 'absolute', top: '-4px', right: '-6px', background: '#e53935', color: 'white', borderRadius: '50%', fontSize: '10px', fontWeight: 'bold', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+              {pendingRequests.length}
+            </span>
+          )}
+        </span>
         <span style={{ fontSize: '10px' }}>友達</span>
       </button>
       <button onClick={() => setScreen('profile')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', color: screen === 'profile' ? accent : subtext }}>
