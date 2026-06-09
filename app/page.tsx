@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friends' | 'search' | 'profile';
+type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friendsposts' | 'friends' | 'search' | 'profile';
 
 // ── デザイントークン ──────────────────────────────────────
 const C: Record<string, string> = {
@@ -329,14 +329,22 @@ export default function Home() {
       padding: '8px 0 22px', zIndex: 100,
     }}>
       <button
-        onClick={() => { setActiveTab('mypost'); setScreen('home'); }}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', color: screen === 'home' && activeTab === 'mypost' ? C.accent : C.subLight }}
+        onClick={() => setScreen('home')}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', color: screen === 'home' ? C.accent : C.subLight }}
       >
         <span style={{ fontSize: '22px' }}>📸</span>
-        <span style={{ fontSize: '10px', fontWeight: screen === 'home' && activeTab === 'mypost' ? '700' : '400' }}>マイ投稿</span>
+        <span style={{ fontSize: '10px', fontWeight: screen === 'home' ? '700' : '400' }}>マイ投稿</span>
       </button>
 
-      {/* カメラボタン */}
+      <button
+        onClick={() => setScreen('friendsposts')}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', color: screen === 'friendsposts' ? C.accent : C.subLight }}
+      >
+        <span style={{ fontSize: '22px' }}>🌅</span>
+        <span style={{ fontSize: '10px', fontWeight: screen === 'friendsposts' ? '700' : '400' }}>友達の投稿</span>
+      </button>
+
+      {/* カメラボタン（中央） */}
       <div style={{ position: 'relative', marginTop: '-22px' }}>
         <button
           onClick={() => setScreen('camera')}
@@ -362,7 +370,7 @@ export default function Home() {
             </span>
           )}
         </span>
-        <span style={{ fontSize: '10px', fontWeight: screen === 'friends' || screen === 'search' ? '700' : '400' }}>友達</span>
+        <span style={{ fontSize: '10px', fontWeight: screen === 'friends' || screen === 'search' ? '700' : '400' }}>友達リスト</span>
       </button>
 
       <button
@@ -500,61 +508,75 @@ export default function Home() {
           </>
         )}
 
-        {/* 友達の今日の投稿 */}
-        {friendsPosts.length > 0 && (
-          <div style={{ marginTop: '28px' }}>
-            <p style={{ color: C.accent, fontWeight: '700', marginBottom: '12px', fontSize: '14px' }}>📸 友達の今日</p>
-            {friendsPosts.map((post, i) => (
-              <div key={i} style={{ marginBottom: '16px', ...s.card({ overflow: 'hidden' }) }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px 8px' }}>
-                  <Avatar name={post.display_name} />
-                  <div>
-                    <p style={{ fontWeight: '600', color: C.text, fontSize: '14px' }}>{post.display_name}</p>
-                    <p style={{ color: C.sub, fontSize: '11px' }}>今日の1枚</p>
-                  </div>
-                </div>
-                <img src={post.image_url} style={{ width: '100%', display: 'block' }} alt="友達の投稿" />
-                <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '0', lineHeight: '1' }}>
-                    {likes.find(l => l.post_id === post.id)?.liked ? '❤️' : '🤍'}
-                  </button>
-                  <span style={{ color: C.sub, fontSize: '13px', fontWeight: '500' }}>
-                    {likes.find(l => l.post_id === post.id)?.count || 0}
-                  </span>
-                  <button onClick={() => setOpenComments(openComments === post.id ? null : post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', marginLeft: '4px', lineHeight: '1' }}>💬</button>
-                  <span style={{ color: C.sub, fontSize: '13px' }}>{(comments[post.id] || []).length}</span>
-                </div>
-                {openComments === post.id && (
-                  <div style={{ padding: '0 14px 12px', borderTop: `0.5px solid ${C.subLight}` }}>
-                    <p style={{ fontSize: '11px', color: C.sub, padding: '8px 0 6px', fontWeight: '700' }}>
-                      💬 {post.display_name}の投稿 ({(comments[post.id] || []).length}件)
-                    </p>
-                    {(comments[post.id] || []).map(c => (
-                      <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-                        <div style={{ width: '28px', height: '28px', borderRadius: radius.full, background: c.user_id === userId ? `linear-gradient(135deg, ${C.accent}, ${C.sub})` : C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700', color: c.user_id === userId ? 'white' : C.accent, flexShrink: 0 }}>
-                          {c.display_name[0]}
-                        </div>
-                        <div style={{ background: c.user_id === userId ? C.accentSoft : 'rgba(0,0,0,0.03)', borderRadius: radius.md, padding: '6px 10px', flex: 1 }}>
-                          <p style={{ fontSize: '11px', fontWeight: '700', color: C.accent, marginBottom: '2px' }}>{c.display_name}</p>
-                          <p style={{ fontSize: '13px', color: C.text }}>{c.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                      <input
-                        value={commentInput[post.id] || ''}
-                        onChange={e => setCommentInput(prev => ({ ...prev, [post.id]: e.target.value }))}
-                        onKeyDown={e => e.key === 'Enter' && addComment(post.id)}
-                        placeholder="コメントを入力..."
-                        style={{ flex: 1, padding: '8px 12px', fontSize: '13px', borderRadius: radius.full, border: `1px solid ${C.subLight}`, background: 'rgba(255,255,255,0.9)', color: C.text, outline: 'none' }}
-                      />
-                      <button onClick={() => addComment(post.id)} style={{ background: C.accent, border: 'none', borderRadius: radius.full, padding: '8px 14px', color: 'white', cursor: 'pointer', fontSize: '13px' }}>送信</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+      </div>
+      <BottomNav />
+    </main>
+  );
+
+  // ── 友達の投稿画面 ────────────────────────────────────────
+  if (screen === 'friendsposts') return (
+    <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', color: C.text, fontFamily: 'sans-serif', paddingBottom: '88px' }}>
+      <div style={s.header}>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>🌅 友達の投稿</h2>
+      </div>
+      <div style={{ padding: '20px 18px' }}>
+        {friendsPosts.length === 0 ? (
+          <div style={{ textAlign: 'center', marginTop: '70px' }}>
+            <p style={{ fontSize: '56px', marginBottom: '16px' }}>🌅</p>
+            <p style={{ color: C.text, opacity: 0.55, fontSize: '15px' }}>友達の今日の投稿はまだありません</p>
+            <p style={{ color: C.sub, fontSize: '13px', marginTop: '8px' }}>友達が投稿すると、ここに表示されます</p>
           </div>
+        ) : (
+          friendsPosts.map((post, i) => (
+            <div key={i} style={{ marginBottom: '16px', ...s.card({ overflow: 'hidden' }) }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px 8px' }}>
+                <Avatar name={post.display_name} />
+                <div>
+                  <p style={{ fontWeight: '600', color: C.text, fontSize: '14px' }}>{post.display_name}</p>
+                  <p style={{ color: C.sub, fontSize: '11px' }}>今日の1枚</p>
+                </div>
+              </div>
+              <img src={post.image_url} style={{ width: '100%', display: 'block' }} alt="友達の投稿" />
+              <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '0', lineHeight: '1' }}>
+                  {likes.find(l => l.post_id === post.id)?.liked ? '❤️' : '🤍'}
+                </button>
+                <span style={{ color: C.sub, fontSize: '13px', fontWeight: '500' }}>
+                  {likes.find(l => l.post_id === post.id)?.count || 0}
+                </span>
+                <button onClick={() => setOpenComments(openComments === post.id ? null : post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', marginLeft: '4px', lineHeight: '1' }}>💬</button>
+                <span style={{ color: C.sub, fontSize: '13px' }}>{(comments[post.id] || []).length}</span>
+              </div>
+              {openComments === post.id && (
+                <div style={{ padding: '0 14px 12px', borderTop: `0.5px solid ${C.subLight}` }}>
+                  <p style={{ fontSize: '11px', color: C.sub, padding: '8px 0 6px', fontWeight: '700' }}>
+                    💬 {post.display_name}の投稿 ({(comments[post.id] || []).length}件)
+                  </p>
+                  {(comments[post.id] || []).map(c => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: radius.full, background: c.user_id === userId ? `linear-gradient(135deg, ${C.accent}, ${C.sub})` : C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700', color: c.user_id === userId ? 'white' : C.accent, flexShrink: 0 }}>
+                        {c.display_name[0]}
+                      </div>
+                      <div style={{ background: c.user_id === userId ? C.accentSoft : 'rgba(0,0,0,0.03)', borderRadius: radius.md, padding: '6px 10px', flex: 1 }}>
+                        <p style={{ fontSize: '11px', fontWeight: '700', color: C.accent, marginBottom: '2px' }}>{c.display_name}</p>
+                        <p style={{ fontSize: '13px', color: C.text }}>{c.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <input
+                      value={commentInput[post.id] || ''}
+                      onChange={e => setCommentInput(prev => ({ ...prev, [post.id]: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && addComment(post.id)}
+                      placeholder="コメントを入力..."
+                      style={{ flex: 1, padding: '8px 12px', fontSize: '13px', borderRadius: radius.full, border: `1px solid ${C.subLight}`, background: 'rgba(255,255,255,0.9)', color: C.text, outline: 'none' }}
+                    />
+                    <button onClick={() => addComment(post.id)} style={{ background: C.accent, border: 'none', borderRadius: radius.full, padding: '8px 14px', color: 'white', cursor: 'pointer', fontSize: '13px' }}>送信</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
         )}
       </div>
       <BottomNav />
