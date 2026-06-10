@@ -824,7 +824,6 @@ export default function Home() {
             <p style={{ fontSize: '12px', color: C.sub, marginTop: '4px' }}>友達</p>
           </div>
         </div>
-        <button onClick={logout} style={{ ...s.btn(C.danger), maxWidth: '360px' }}>ログアウト</button>
       </div>
       <BottomNav />
     </main>
@@ -894,7 +893,10 @@ export default function Home() {
           <span style={{ fontSize: '20px' }}>📸</span>
           <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>青春snap</span>
         </div>
-        <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>
+          <button onClick={logout} style={{ background: 'none', border: `1px solid ${C.subLight}`, color: C.sub, cursor: 'pointer', fontSize: '12px', padding: '4px 10px', borderRadius: radius.sm }}>ログアウト</button>
+        </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18px 18px', overflowY: 'auto' }}>
