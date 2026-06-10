@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friendsposts' | 'friends' | 'search' | 'profile';
+type Screen = 'top' | 'login' | 'register' | 'setup' | 'home' | 'camera' | 'friendsposts' | 'friends' | 'search' | 'profile' | 'friendarchive';
 
 // ── デザイントークン ──────────────────────────────────────
 const C: Record<string, string> = {
@@ -84,6 +84,11 @@ export default function Home() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editSchool, setEditSchool] = useState('');
+  const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<{ id: string; display_name: string; username: string; school?: string } | null>(null);
+  const [friendArchivePosts, setFriendArchivePosts] = useState<{ image_url: string; posted_at: string }[]>([]);
+  const [friendArchiveMonth, setFriendArchiveMonth] = useState<string | null>(null);
+  const [friendGraduated, setFriendGraduated] = useState(false);
 
   // ── データ取得 ────────────────────────────────────────────
   const fetchTodayPost = async (uid: string) => {
@@ -163,6 +168,7 @@ export default function Home() {
   const checkGraduation = async (uid: string) => {
     const { data: user } = await supabase.from('users').select('graduation_date').eq('id', uid).single();
     if (!user?.graduation_date) return;
+    setGraduationDate(user.graduation_date);
     if (new Date() >= new Date(user.graduation_date)) {
       setIsGraduated(true);
       const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
@@ -239,6 +245,37 @@ export default function Home() {
     await supabase.from('friendships').insert({ requester_id: userId, receiver_id: receiverId, status: 'pending' });
     setSentRequests(prev => new Set(prev).add(receiverId));
   };
+
+  const openFriendArchive = async (friend: { id: string; display_name: string; username: string }) => {
+    const { data: user } = await supabase.from('users').select('graduation_date, school').eq('id', friend.id).single();
+    const graduated = user?.graduation_date ? new Date() >= new Date(user.graduation_date) : false;
+    setSelectedFriend({ ...friend, school: user?.school ?? '' });
+    setFriendGraduated(graduated);
+    setFriendArchivePosts([]);
+    setFriendArchiveMonth(null);
+    if (graduated) {
+      const { data: posts } = await supabase.from('posts').select('image_url, posted_at').eq('user_id', friend.id).order('posted_at', { ascending: true });
+      if (posts) setFriendArchivePosts(posts);
+    }
+    setScreen('friendarchive');
+  };
+
+  const compressImage = (file: File, maxPx = 1080, quality = 0.82): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('圧縮失敗')), 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
 
   const saveProfile = async () => {
     await supabase.from('users').update({ display_name: editDisplayName, school: editSchool }).eq('id', userId);
@@ -452,6 +489,102 @@ export default function Home() {
     </main>
   );
 
+  // ── 友達アーカイブ画面 ────────────────────────────────────
+  if (screen === 'friendarchive' && selectedFriend) {
+    const byMonth: Record<string, { image_url: string; posted_at: string }[]> = {};
+    for (const p of friendArchivePosts) {
+      const ym = p.posted_at.slice(0, 7);
+      if (!byMonth[ym]) byMonth[ym] = [];
+      byMonth[ym].push(p);
+    }
+    const months = Object.keys(byMonth).sort();
+    const selected = friendArchiveMonth ?? months[months.length - 1] ?? null;
+
+    return (
+      <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', color: C.text, fontFamily: 'sans-serif', paddingBottom: '80px' }}>
+        <div style={s.header}>
+          <button onClick={() => setScreen('friends')} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '22px', lineHeight: 1, padding: '0 4px' }}>‹</button>
+          <h2 style={{ fontSize: '17px', fontWeight: '700', color: C.accent, flex: 1, textAlign: 'center' }}>{selectedFriend.display_name}</h2>
+          <div style={{ width: '32px' }} />
+        </div>
+
+        <div style={{ padding: '20px 18px' }}>
+          {/* プロフィール */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '24px' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: radius.full, background: `linear-gradient(135deg, ${C.sub}, ${C.accent})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700', fontSize: '22px', flexShrink: 0 }}>
+              {selectedFriend.display_name[0]}
+            </div>
+            <div>
+              <p style={{ fontWeight: '700', fontSize: '17px', color: C.text }}>{selectedFriend.display_name}</p>
+              <p style={{ color: C.sub, fontSize: '13px' }}>@{selectedFriend.username}</p>
+              {selectedFriend.school && <p style={{ color: C.text, fontSize: '12px', opacity: 0.65, marginTop: '2px' }}>🏫 {selectedFriend.school}</p>}
+            </div>
+          </div>
+
+          {!friendGraduated ? (
+            <div style={{ textAlign: 'center', marginTop: '60px' }}>
+              <p style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</p>
+              <p style={{ color: C.text, fontWeight: '600', fontSize: '15px' }}>まだ卒業していません</p>
+              <p style={{ color: C.sub, fontSize: '13px', marginTop: '8px' }}>卒業後に写真が解放されます</p>
+            </div>
+          ) : friendArchivePosts.length === 0 ? (
+            <div style={{ textAlign: 'center', marginTop: '60px' }}>
+              <p style={{ fontSize: '48px', marginBottom: '16px' }}>📭</p>
+              <p style={{ color: C.sub, fontSize: '14px' }}>投稿がありません</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ background: C.gold, borderRadius: radius.lg, padding: '14px 18px', textAlign: 'center', marginBottom: '20px' }}>
+                <p style={{ fontWeight: '700', color: 'white', fontSize: '15px' }}>🎓 卒業！青春の記録 {friendArchivePosts.length}枚</p>
+              </div>
+
+              {/* 月セレクター */}
+              <div style={{ overflowX: 'auto', display: 'flex', gap: '8px', paddingBottom: '4px', marginBottom: '16px' }}>
+                {months.map(ym => {
+                  const [y, m] = ym.split('-');
+                  const active = ym === selected;
+                  return (
+                    <button
+                      key={ym}
+                      onClick={() => setFriendArchiveMonth(ym)}
+                      style={{
+                        flexShrink: 0, padding: '7px 14px', fontSize: '13px', fontWeight: active ? '700' : '400',
+                        borderRadius: radius.full, border: 'none', cursor: 'pointer',
+                        background: active ? C.accent : 'rgba(255,255,255,0.85)',
+                        color: active ? 'white' : C.text,
+                        boxShadow: active ? `0 2px 10px rgba(2,136,209,0.35)` : 'none',
+                      }}
+                    >{y}年{parseInt(m)}月</button>
+                  );
+                })}
+              </div>
+
+              {/* グリッド */}
+              {selected && byMonth[selected] && (
+                <>
+                  <p style={{ fontSize: '13px', color: C.sub, marginBottom: '10px', fontWeight: '600' }}>
+                    {selected.split('-')[0]}年{parseInt(selected.split('-')[1])}月 — {byMonth[selected].length}枚
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {byMonth[selected].map((post, i) => (
+                      <div key={i} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden', borderRadius: radius.sm }}>
+                        <img src={post.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} alt={post.posted_at} />
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.45))', padding: '10px 4px 4px' }}>
+                          <p style={{ color: 'white', fontSize: '9px', textAlign: 'center' }}>{post.posted_at.slice(5).replace('-', '/')}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
+
   // ── 友達管理画面 ──────────────────────────────────────────
   if (screen === 'friends') return (
     <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', color: C.text, fontFamily: 'sans-serif', paddingBottom: '80px' }}>
@@ -497,13 +630,22 @@ export default function Home() {
           <>
             <p style={{ color: C.sub, fontSize: '13px', marginBottom: '10px' }}>{friends.length}人のフレンド</p>
             {friends.map(f => (
-              <div key={f.id} style={{ ...s.card({ padding: '14px 16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }) }}>
-                <Avatar name={f.display_name} />
-                <div>
-                  <p style={{ fontWeight: '600', color: C.text, fontSize: '15px' }}>{f.display_name}</p>
-                  <p style={{ color: C.sub, fontSize: '12px' }}>@{f.username}</p>
+              <button
+                key={f.id}
+                onClick={() => openFriendArchive(f)}
+                style={{ width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginBottom: '8px', textAlign: 'left' }}
+              >
+                <div style={{ ...s.card({ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }) }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Avatar name={f.display_name} />
+                    <div>
+                      <p style={{ fontWeight: '600', color: C.text, fontSize: '15px' }}>{f.display_name}</p>
+                      <p style={{ color: C.sub, fontSize: '12px' }}>@{f.username}</p>
+                    </div>
+                  </div>
+                  <span style={{ color: C.subLight, fontSize: '18px' }}>›</span>
                 </div>
-              </div>
+              </button>
             ))}
           </>
         )}
@@ -703,7 +845,8 @@ export default function Home() {
               if (!session.session) return;
               const uid = session.session.user.id;
               const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
-              const { error } = await supabase.storage.from('posts').upload(path, file, { upsert: true });
+              const compressed = await compressImage(file);
+              const { error } = await supabase.storage.from('posts').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
               if (error) { alert('アップロード失敗: ' + error.message); return; }
               const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
               await supabase.from('posts').upsert({ user_id: uid, image_url: urlData.publicUrl, posted_at: new Date().toISOString().split('T')[0] });
@@ -717,7 +860,7 @@ export default function Home() {
             htmlFor="camera-input"
             style={{ display: 'inline-block', padding: '16px 40px', fontSize: '16px', fontWeight: '700', background: C.accent, borderRadius: radius.full, cursor: 'pointer', color: 'white', boxShadow: `0 4px 20px rgba(2,136,209,0.4)` }}
           >
-            📷 写真を選ぶ・撮る
+            📷 写真を撮る
           </label>
           <br />
           <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '14px', marginTop: '20px' }}>← 戻る</button>
@@ -728,8 +871,13 @@ export default function Home() {
 
   // ── ホーム画面 ────────────────────────────────────────────
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const daysUntilGraduation = graduationDate
+    ? Math.ceil((new Date(graduationDate).getTime() - today.setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
+    : null;
+  const showCountdown = !isGraduated && daysUntilGraduation !== null && daysUntilGraduation >= 0 && daysUntilGraduation <= 365;
+  const todayForCalendar = new Date();
+  const year = todayForCalendar.getFullYear();
+  const month = todayForCalendar.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -762,22 +910,75 @@ export default function Home() {
           </div>
         )}
 
-        {/* 卒業おめでとう */}
-        {isGraduated && (
-          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px' }}>
-            <div style={{ background: C.gold, borderRadius: radius.lg, padding: '22px', textAlign: 'center', marginBottom: '16px' }}>
-              <p style={{ fontSize: '36px', marginBottom: '8px' }}>🎓</p>
-              <p style={{ fontWeight: '700', color: 'white', fontSize: '18px', marginBottom: '4px' }}>卒業おめでとう！</p>
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px' }}>青春の記録が全部解放されました</p>
-            </div>
-            {allPosts.map((post, i) => (
-              <div key={i} style={{ marginBottom: '16px', ...s.card({ overflow: 'hidden' }) }}>
-                <p style={{ color: C.sub, fontSize: '13px', padding: '12px 16px 8px' }}>📅 {post.posted_at}</p>
-                <img src={post.image_url} style={{ width: '100%', display: 'block' }} alt="投稿" />
-              </div>
-            ))}
+        {/* 卒業カウントダウン */}
+        {showCountdown && (
+          <div style={{ width: '100%', maxWidth: '360px', marginBottom: '16px', background: 'linear-gradient(135deg, rgba(2,136,209,0.12), rgba(79,195,247,0.15))', borderRadius: radius.lg, padding: '16px 20px', border: `0.5px solid rgba(2,136,209,0.25)`, textAlign: 'center' }}>
+            <p style={{ fontSize: '11px', color: C.sub, fontWeight: '600', marginBottom: '4px', letterSpacing: '0.5px' }}>卒業まで</p>
+            <p style={{ fontSize: '48px', fontWeight: '800', color: C.accent, lineHeight: 1, marginBottom: '4px' }}>{daysUntilGraduation}</p>
+            <p style={{ fontSize: '14px', color: C.text, fontWeight: '600' }}>日</p>
           </div>
         )}
+
+        {/* 卒業おめでとう＋月別アーカイブ */}
+        {isGraduated && (() => {
+          const byMonth: Record<string, { image_url: string; posted_at: string }[]> = {};
+          for (const p of allPosts) {
+            const ym = p.posted_at.slice(0, 7);
+            if (!byMonth[ym]) byMonth[ym] = [];
+            byMonth[ym].push(p);
+          }
+          const months = Object.keys(byMonth).sort();
+          const selected = archiveMonth ?? months[months.length - 1] ?? null;
+          return (
+            <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px' }}>
+              <div style={{ background: C.gold, borderRadius: radius.lg, padding: '22px', textAlign: 'center', marginBottom: '16px' }}>
+                <p style={{ fontSize: '36px', marginBottom: '8px' }}>🎓</p>
+                <p style={{ fontWeight: '700', color: 'white', fontSize: '18px', marginBottom: '4px' }}>卒業おめでとう！</p>
+                <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px' }}>青春の記録が全部解放されました</p>
+              </div>
+
+              {/* 月セレクター */}
+              <div style={{ overflowX: 'auto', display: 'flex', gap: '8px', paddingBottom: '4px', marginBottom: '16px' }}>
+                {months.map(ym => {
+                  const [y, m] = ym.split('-');
+                  const active = ym === selected;
+                  return (
+                    <button
+                      key={ym}
+                      onClick={() => setArchiveMonth(ym)}
+                      style={{
+                        flexShrink: 0, padding: '7px 14px', fontSize: '13px', fontWeight: active ? '700' : '400',
+                        borderRadius: radius.full, border: 'none', cursor: 'pointer',
+                        background: active ? C.accent : 'rgba(255,255,255,0.85)',
+                        color: active ? 'white' : C.text,
+                        boxShadow: active ? `0 2px 10px rgba(2,136,209,0.35)` : 'none',
+                      }}
+                    >{y}年{parseInt(m)}月</button>
+                  );
+                })}
+              </div>
+
+              {/* 選択月のグリッド */}
+              {selected && byMonth[selected] && (
+                <>
+                  <p style={{ fontSize: '13px', color: C.sub, marginBottom: '10px', fontWeight: '600' }}>
+                    {selected.split('-')[0]}年{parseInt(selected.split('-')[1])}月 — {byMonth[selected].length}枚
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {byMonth[selected].map((post, i) => (
+                      <div key={i} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden', borderRadius: radius.sm }}>
+                        <img src={post.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} alt={post.posted_at} />
+                        <div style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(0,0,0,0.45))', padding: '10px 4px 4px' }}>
+                          <p style={{ color: 'white', fontSize: '9px', textAlign: 'center' }}>{post.posted_at.slice(5).replace('-', '/')}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* マイ投稿タブ */}
         {activeTab === 'mypost' && (
@@ -799,7 +1000,7 @@ export default function Home() {
                   const day = i + 1;
                   const dateStr = `${monthStr}-${String(day).padStart(2, '0')}`;
                   const hasPost = postedDates.includes(dateStr);
-                  const isToday = day === today.getDate();
+                  const isToday = day === todayForCalendar.getDate();
                   return (
                     <div key={day} style={{
                       padding: '5px 0', fontSize: '12px', borderRadius: radius.full,
