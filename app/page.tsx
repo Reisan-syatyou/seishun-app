@@ -71,7 +71,6 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<{ id: string; display_name: string; username: string }[]>([]);
   const [pendingRequests, setPendingRequests] = useState<{ id: string; requester: { id: string; display_name: string; username: string } }[]>([]);
   const [friendsPosts, setFriendsPosts] = useState<{ id: string; image_url: string; user_id: string; display_name: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<'mypost' | 'friends'>('mypost');
   const [allPosts, setAllPosts] = useState<{ image_url: string; posted_at: string }[]>([]);
   const [isGraduated, setIsGraduated] = useState(false);
   const [postedDates, setPostedDates] = useState<string[]>([]);
@@ -828,8 +827,12 @@ export default function Home() {
   );
 
   // ── カメラ画面 ────────────────────────────────────────────
+  useEffect(() => {
+    if (screen === 'camera' && todayPost) setScreen('home');
+  }, [screen, todayPost]);
+
   if (screen === 'camera') {
-    if (todayPost) { setScreen('home'); return null; }
+    if (todayPost) return null;
     return (
       <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: 'sans-serif' }}>
         <div style={{ background: C.white, borderRadius: radius.xl, padding: '44px 32px', boxShadow: '0 8px 40px rgba(2,136,209,0.12)', textAlign: 'center', width: '100%', maxWidth: '340px' }}>
@@ -871,13 +874,13 @@ export default function Home() {
 
   // ── ホーム画面 ────────────────────────────────────────────
   const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   const daysUntilGraduation = graduationDate
-    ? Math.ceil((new Date(graduationDate).getTime() - today.setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((new Date(graduationDate).getTime() - todayMidnight) / (1000 * 60 * 60 * 24))
     : null;
   const showCountdown = !isGraduated && daysUntilGraduation !== null && daysUntilGraduation >= 0 && daysUntilGraduation <= 365;
-  const todayForCalendar = new Date();
-  const year = todayForCalendar.getFullYear();
-  const month = todayForCalendar.getMonth();
+  const year = today.getFullYear();
+  const month = today.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -977,9 +980,8 @@ export default function Home() {
           );
         })()}
 
-        {/* マイ投稿タブ */}
-        {activeTab === 'mypost' && (
-          <>
+        {/* マイ投稿 */}
+        <>
             {/* カレンダー */}
             <div style={{ width: '100%', maxWidth: '360px', marginBottom: '18px', ...s.card({ padding: '16px' }) }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -997,7 +999,7 @@ export default function Home() {
                   const day = i + 1;
                   const dateStr = `${monthStr}-${String(day).padStart(2, '0')}`;
                   const hasPost = postedDates.includes(dateStr);
-                  const isToday = day === todayForCalendar.getDate();
+                  const isToday = day === today.getDate();
                   return (
                     <div key={day} style={{
                       padding: '5px 0', fontSize: '12px', borderRadius: radius.full,
@@ -1027,7 +1029,6 @@ export default function Home() {
               </div>
             )}
           </>
-        )}
 
 
       </div>
