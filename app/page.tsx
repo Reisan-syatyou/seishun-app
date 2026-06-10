@@ -306,6 +306,10 @@ export default function Home() {
     });
   }, []);
 
+  useEffect(() => {
+    if (screen === 'camera' && todayPost) setScreen('home');
+  }, [screen, todayPost]);
+
   // ── 認証 ─────────────────────────────────────────────────
   const register = async () => {
     setLoading(true); setError('');
@@ -827,10 +831,6 @@ export default function Home() {
   );
 
   // ── カメラ画面 ────────────────────────────────────────────
-  useEffect(() => {
-    if (screen === 'camera' && todayPost) setScreen('home');
-  }, [screen, todayPost]);
-
   if (screen === 'camera') {
     if (todayPost) return null;
     return (
