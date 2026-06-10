@@ -374,7 +374,7 @@ export default function Home() {
       </button>
 
       <button
-        onClick={() => setScreen('friendsposts')}
+        onClick={() => { fetchFriendsPosts(userId); setScreen('friendsposts'); }}
         style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', color: screen === 'friendsposts' ? C.accent : C.subLight }}
       >
         <span style={{ fontSize: '22px' }}>🌅</span>
@@ -891,10 +891,7 @@ export default function Home() {
           <span style={{ fontSize: '20px' }}>📸</span>
           <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>青春snap</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>
-          <button onClick={logout} style={{ background: 'none', border: `1px solid ${C.subLight}`, color: C.sub, cursor: 'pointer', fontSize: '12px', padding: '4px 10px', borderRadius: radius.sm }}>ログアウト</button>
-        </div>
+        <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18px 18px', overflowY: 'auto' }}>
