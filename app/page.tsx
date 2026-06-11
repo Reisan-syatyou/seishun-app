@@ -160,7 +160,7 @@ export default function Home() {
       .in('user_id', friendIds)
       .eq('posted_at', today);
     if (posts) {
-      const mapped = posts.map(p => ({ ...p, display_name: p.user?.display_name || '' }));
+      const mapped = posts.map(p => ({ ...p, display_name: (p.user as any)?.display_name || '' }));
       setFriendsPosts(mapped);
       await fetchLikes(uid, mapped);
       await fetchComments(mapped.map(p => p.id));
