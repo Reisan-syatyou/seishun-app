@@ -673,35 +673,41 @@ export default function Home() {
         )}
 
         {/* 同じ学校・同学年 */}
-        {schoolmates.length > 0 && (
+        {school && (
           <div style={{ marginTop: '28px' }}>
             <p style={{ color: C.accent, fontWeight: '700', marginBottom: '4px', fontSize: '14px' }}>🏫 同じ学校・同学年</p>
-            <p style={{ color: C.sub, fontSize: '12px', marginBottom: '12px' }}>{schoolmates.length}人が見つかりました</p>
-            {schoolmates.map(u => {
-              const isFriend = friends.some(f => f.id === u.id);
-              const isSentPending = sentRequests.has(u.id);
-              const isReceivedPending = pendingRequests.some(r => r.requester.id === u.id);
-              return (
-                <div key={u.id} style={{ ...s.card({ padding: '14px 16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }) }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Avatar name={u.display_name} />
-                    <div>
-                      <p style={{ fontWeight: '600', color: C.text, fontSize: '15px' }}>{u.display_name}</p>
-                      <p style={{ color: C.sub, fontSize: '12px' }}>@{u.username}</p>
+            {schoolmates.length === 0 ? (
+              <p style={{ color: C.sub, fontSize: '13px', marginTop: '8px' }}>まだ同じ学校・同学年のユーザーがいません</p>
+            ) : (
+              <>
+                <p style={{ color: C.sub, fontSize: '12px', marginBottom: '12px' }}>{schoolmates.length}人が見つかりました</p>
+                {schoolmates.map(u => {
+                  const isFriend = friends.some(f => f.id === u.id);
+                  const isSentPending = sentRequests.has(u.id);
+                  const isReceivedPending = pendingRequests.some(r => r.requester.id === u.id);
+                  return (
+                    <div key={u.id} style={{ ...s.card({ padding: '14px 16px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }) }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Avatar name={u.display_name} />
+                        <div>
+                          <p style={{ fontWeight: '600', color: C.text, fontSize: '15px' }}>{u.display_name}</p>
+                          <p style={{ color: C.sub, fontSize: '12px' }}>@{u.username}</p>
+                        </div>
+                      </div>
+                      {isFriend ? (
+                        <span style={{ padding: '7px 14px', background: C.accentSoft, borderRadius: radius.sm, color: C.accent, fontSize: '13px', fontWeight: '700' }}>友達 ✓</span>
+                      ) : isSentPending ? (
+                        <span style={{ padding: '7px 14px', background: 'rgba(0,0,0,0.05)', borderRadius: radius.sm, color: C.sub, fontSize: '13px' }}>申請済み</span>
+                      ) : isReceivedPending ? (
+                        <button onClick={() => { const r = pendingRequests.find(r => r.requester.id === u.id); if (r) acceptFriendRequest(r.id, userId); }} style={{ padding: '8px 18px', background: C.accent, border: 'none', borderRadius: radius.sm, color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>承認</button>
+                      ) : (
+                        <button onClick={() => sendFriendRequest(u.id)} style={{ padding: '8px 18px', background: C.accent, border: 'none', borderRadius: radius.sm, color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>申請</button>
+                      )}
                     </div>
-                  </div>
-                  {isFriend ? (
-                    <span style={{ padding: '7px 14px', background: C.accentSoft, borderRadius: radius.sm, color: C.accent, fontSize: '13px', fontWeight: '700' }}>友達 ✓</span>
-                  ) : isSentPending ? (
-                    <span style={{ padding: '7px 14px', background: 'rgba(0,0,0,0.05)', borderRadius: radius.sm, color: C.sub, fontSize: '13px' }}>申請済み</span>
-                  ) : isReceivedPending ? (
-                    <button onClick={() => { const r = pendingRequests.find(r => r.requester.id === u.id); if (r) acceptFriendRequest(r.id, userId); }} style={{ padding: '8px 18px', background: C.accent, border: 'none', borderRadius: radius.sm, color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>承認</button>
-                  ) : (
-                    <button onClick={() => sendFriendRequest(u.id)} style={{ padding: '8px 18px', background: C.accent, border: 'none', borderRadius: radius.sm, color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>申請</button>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </>
+            )}
           </div>
         )}
 
