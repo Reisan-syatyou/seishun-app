@@ -1,6 +1,6 @@
 {
-  "name": "青春snap",
-  "short_name": "青春snap",
+  "name": "ZushiSnap",
+  "short_name": "ZushiSnap",
   "description": "毎日1枚。卒業の日に、全部開く。",
   "start_url": "/",
   "display": "standalone",

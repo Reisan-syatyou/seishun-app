@@ -64,14 +64,14 @@ export default function Home() {
   const [graduationDate, setGraduationDate] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [todayPost, setTodayPost] = useState<{ image_url: string } | null>(null);
+  const [todayPost, setTodayPost] = useState<{ image_url: string; caption?: string } | null>(null);
   const [userId, setUserId] = useState('');
   const [friends, setFriends] = useState<{ id: string; display_name: string; username: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ id: string; display_name: string; username: string }[]>([]);
   const [pendingRequests, setPendingRequests] = useState<{ id: string; requester: { id: string; display_name: string; username: string } }[]>([]);
-  const [friendsPosts, setFriendsPosts] = useState<{ id: string; image_url: string; user_id: string; display_name: string }[]>([]);
-  const [allPosts, setAllPosts] = useState<{ image_url: string; posted_at: string }[]>([]);
+  const [friendsPosts, setFriendsPosts] = useState<{ id: string; image_url: string; user_id: string; display_name: string; caption?: string }[]>([]);
+  const [allPosts, setAllPosts] = useState<{ image_url: string; posted_at: string; caption?: string }[]>([]);
   const [isGraduated, setIsGraduated] = useState(false);
   const [postedDates, setPostedDates] = useState<string[]>([]);
   const [likes, setLikes] = useState<{ post_id: string; count: number; liked: boolean }[]>([]);
@@ -88,11 +88,14 @@ export default function Home() {
   const [friendArchivePosts, setFriendArchivePosts] = useState<{ image_url: string; posted_at: string }[]>([]);
   const [friendArchiveMonth, setFriendArchiveMonth] = useState<string | null>(null);
   const [friendGraduated, setFriendGraduated] = useState(false);
+  const [cameraFile, setCameraFile] = useState<File | null>(null);
+  const [cameraPreview, setCameraPreview] = useState<string | null>(null);
+  const [captionInput, setCaptionInput] = useState('');
 
   // ── データ取得 ────────────────────────────────────────────
   const fetchTodayPost = async (uid: string) => {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase.from('posts').select('*').eq('user_id', uid).eq('posted_at', today);
+    const { data } = await supabase.from('posts').select('image_url, caption').eq('user_id', uid).eq('posted_at', today);
     if (data && data.length > 0) setTodayPost(data[0]);
   };
 
@@ -153,7 +156,7 @@ export default function Home() {
     const today = new Date().toISOString().split('T')[0];
     const { data: posts } = await supabase
       .from('posts')
-      .select('*, user:user_id(display_name)')
+      .select('id, image_url, user_id, caption, user:user_id(display_name)')
       .in('user_id', friendIds)
       .eq('posted_at', today);
     if (posts) {
@@ -170,7 +173,7 @@ export default function Home() {
     setGraduationDate(user.graduation_date);
     if (new Date() >= new Date(user.graduation_date)) {
       setIsGraduated(true);
-      const { data: posts } = await supabase.from('posts').select('*').eq('user_id', uid).order('posted_at', { ascending: true });
+      const { data: posts } = await supabase.from('posts').select('image_url, posted_at, caption').eq('user_id', uid).order('posted_at', { ascending: true });
       if (posts) setAllPosts(posts);
     }
   };
@@ -439,7 +442,7 @@ export default function Home() {
   if (screen === 'top') return (
     <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', fontFamily: 'sans-serif' }}>
       <div style={{ width: '96px', height: '96px', background: C.white, borderRadius: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px', marginBottom: '24px', boxShadow: `0 6px 28px rgba(2,136,209,0.2)` }}>📸</div>
-      <h1 style={{ fontSize: '36px', fontWeight: '800', color: C.accentDark, marginBottom: '10px', letterSpacing: '-0.5px' }}>青春snap</h1>
+      <h1 style={{ fontSize: '36px', fontWeight: '800', color: C.accentDark, marginBottom: '10px', letterSpacing: '-0.5px' }}>ZushiSnap</h1>
       <p style={{ color: C.text, fontSize: '15px', marginBottom: '6px', textAlign: 'center', fontWeight: '500' }}>毎日1枚。卒業の日に、全部開く。</p>
       <p style={{ color: C.sub, fontSize: '13px', marginBottom: '56px', textAlign: 'center' }}>今日の写真は今日だけ見られる</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '320px' }}>
@@ -682,6 +685,9 @@ export default function Home() {
                 </div>
               </div>
               <img src={post.image_url} style={{ width: '100%', display: 'block' }} alt="友達の投稿" />
+              {post.caption && (
+                <p style={{ color: C.text, fontSize: '14px', padding: '10px 14px 2px', lineHeight: '1.5' }}>{post.caption}</p>
+              )}
               <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button onClick={() => toggleLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '0', lineHeight: '1' }}>
                   {likes.find(l => l.post_id === post.id)?.liked ? '❤️' : '🤍'}
@@ -832,40 +838,80 @@ export default function Home() {
   // ── カメラ画面 ────────────────────────────────────────────
   if (screen === 'camera') {
     if (todayPost) return null;
+
+    const handlePost = async () => {
+      if (!cameraFile) return;
+      setLoading(true);
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) { setLoading(false); return; }
+      const uid = session.session.user.id;
+      const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
+      const compressed = await compressImage(cameraFile);
+      const { error } = await supabase.storage.from('posts').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
+      if (error) { alert('アップロード失敗: ' + error.message); setLoading(false); return; }
+      const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
+      await supabase.from('posts').upsert({
+        user_id: uid,
+        image_url: urlData.publicUrl,
+        posted_at: new Date().toISOString().split('T')[0],
+        caption: captionInput.trim() || null,
+      });
+      await fetchTodayPost(uid);
+      await fetchPostedDates(uid);
+      setCameraFile(null); setCameraPreview(null); setCaptionInput('');
+      setLoading(false);
+      setScreen('home');
+    };
+
     return (
       <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: 'sans-serif' }}>
-        <div style={{ background: C.white, borderRadius: radius.xl, padding: '44px 32px', boxShadow: '0 8px 40px rgba(2,136,209,0.12)', textAlign: 'center', width: '100%', maxWidth: '340px' }}>
-          <div style={{ fontSize: '72px', marginBottom: '20px' }}>📷</div>
-          <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '8px', color: C.accent }}>今日の1枚</h2>
-          <p style={{ color: C.sub, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
-          <input
-            type="file" accept="image/*" capture="environment"
-            onChange={async e => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const { data: session } = await supabase.auth.getSession();
-              if (!session.session) return;
-              const uid = session.session.user.id;
-              const path = `${uid}/${new Date().toISOString().split('T')[0]}.jpg`;
-              const compressed = await compressImage(file);
-              const { error } = await supabase.storage.from('posts').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
-              if (error) { alert('アップロード失敗: ' + error.message); return; }
-              const { data: urlData } = supabase.storage.from('posts').getPublicUrl(path);
-              await supabase.from('posts').upsert({ user_id: uid, image_url: urlData.publicUrl, posted_at: new Date().toISOString().split('T')[0] });
-              await fetchTodayPost(uid);
-              await fetchPostedDates(uid);
-              setScreen('home');
-            }}
-            style={{ display: 'none' }} id="camera-input"
-          />
-          <label
-            htmlFor="camera-input"
-            style={{ display: 'inline-block', padding: '16px 40px', fontSize: '16px', fontWeight: '700', background: C.accent, borderRadius: radius.full, cursor: 'pointer', color: 'white', boxShadow: `0 4px 20px rgba(2,136,209,0.4)` }}
-          >
-            📷 写真を撮る
-          </label>
-          <br />
-          <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '14px', marginTop: '20px' }}>← 戻る</button>
+        <div style={{ background: C.white, borderRadius: radius.xl, padding: '36px 28px', boxShadow: '0 8px 40px rgba(2,136,209,0.12)', textAlign: 'center', width: '100%', maxWidth: '340px' }}>
+          {!cameraPreview ? (
+            <>
+              <div style={{ fontSize: '72px', marginBottom: '20px' }}>📷</div>
+              <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '8px', color: C.accent }}>今日の1枚</h2>
+              <p style={{ color: C.sub, fontSize: '13px', marginBottom: '32px' }}>この写真は今日だけ見られます</p>
+              <input
+                type="file" accept="image/*" capture="environment"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setCameraFile(file);
+                  setCameraPreview(URL.createObjectURL(file));
+                }}
+                style={{ display: 'none' }} id="camera-input"
+              />
+              <label
+                htmlFor="camera-input"
+                style={{ display: 'inline-block', padding: '16px 40px', fontSize: '16px', fontWeight: '700', background: C.accent, borderRadius: radius.full, cursor: 'pointer', color: 'white', boxShadow: `0 4px 20px rgba(2,136,209,0.4)` }}
+              >
+                📷 写真を撮る
+              </label>
+              <br />
+              <button onClick={() => setScreen('home')} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '14px', marginTop: '20px' }}>← 戻る</button>
+            </>
+          ) : (
+            <>
+              <img src={cameraPreview} style={{ width: '100%', borderRadius: radius.md, marginBottom: '16px', display: 'block' }} alt="プレビュー" />
+              <textarea
+                value={captionInput}
+                onChange={e => setCaptionInput(e.target.value)}
+                placeholder="ひとこと添える（任意）"
+                maxLength={100}
+                rows={2}
+                style={{ ...s.input, resize: 'none', lineHeight: '1.5', marginBottom: '4px' }}
+              />
+              <p style={{ color: C.subLight, fontSize: '11px', textAlign: 'right', marginBottom: '16px' }}>{captionInput.length}/100</p>
+              <button onClick={handlePost} disabled={loading} style={s.btn()}>
+                {loading ? '投稿中...' : '✨ 投稿する'}
+              </button>
+              <br />
+              <button
+                onClick={() => { setCameraFile(null); setCameraPreview(null); setCaptionInput(''); }}
+                style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '14px', marginTop: '16px' }}
+              >撮り直す</button>
+            </>
+          )}
         </div>
       </main>
     );
@@ -891,7 +937,7 @@ export default function Home() {
       <div style={s.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '20px' }}>📸</span>
-          <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>青春snap</span>
+          <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>ZushiSnap</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>
@@ -1018,7 +1064,12 @@ export default function Home() {
             {todayPost ? (
               <div style={{ width: '100%', maxWidth: '360px', marginBottom: '20px', ...s.card({ overflow: 'hidden' }) }}>
                 <img src={todayPost.image_url} style={{ width: '100%', display: 'block' }} alt="今日の投稿" />
-                <p style={{ color: C.sub, fontSize: '13px', padding: '12px', textAlign: 'center' }}>✨ 今日の1枚</p>
+                <div style={{ padding: '12px 14px' }}>
+                  {todayPost.caption && (
+                    <p style={{ color: C.text, fontSize: '14px', marginBottom: '6px', lineHeight: '1.5' }}>{todayPost.caption}</p>
+                  )}
+                  <p style={{ color: C.sub, fontSize: '12px', textAlign: 'center' }}>✨ 今日の1枚</p>
+                </div>
               </div>
             ) : !isGraduated && (
               <div style={{ width: '100%', maxWidth: '360px', marginTop: '8px', ...s.card({ padding: '24px', textAlign: 'center', border: `1.5px dashed ${C.sub}`, background: 'rgba(255,255,255,0.6)' }) }}>
