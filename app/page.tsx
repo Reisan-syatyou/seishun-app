@@ -403,6 +403,21 @@ export default function Home() {
     setIsGraduated(false); setAllPosts([]); setLikes([]);
     setFriends([]); setPendingRequests([]);
   };
+    const deleteAccount = async () => {
+    if (!window.confirm('退会すると、投稿した写真を含むすべてのデータが削除され、元に戻せません。本当に退会しますか?')) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user.id;
+    if (!uid) return;
+    const { data: files, error: listError } = await supabase.storage.from('posts').list(uid, { limit: 1000 });
+    if (listError) { alert('退会に失敗しました。もう一度お試しください。'); return; }
+    if (files && files.length > 0) {
+      const { error: removeError } = await supabase.storage.from('posts').remove(files.map(f => `${uid}/${f.name}`));
+      if (removeError) { alert('退会に失敗しました。もう一度お試しください。'); return; }
+    }
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) { alert('退会に失敗しました。もう一度お試しください。'); return; }
+    await logout();
+  };
 
   // ── 共通パーツ ────────────────────────────────────────────
   const BottomNav = () => (
@@ -911,6 +926,7 @@ export default function Home() {
             <p style={{ fontSize: '12px', color: C.sub, marginTop: '4px' }}>友達</p>
           </div>
         </div>
+                <button onClick={deleteAccount} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '12px', padding: '8px', textDecoration: 'underline', marginTop: '16px' }}>退会する</button>
       </div>
       <BottomNav />
     </main>
