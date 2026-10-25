@@ -21,7 +21,7 @@ function extractStoragePath(value: string): string {
 async function toSignedUrl(pathOrUrl: string, expiresInSec = 3600): Promise<string> {
   const path = extractStoragePath(pathOrUrl);
   const { data, error } = await supabase.storage.from('posts').createSignedUrl(path, expiresInSec);
-  if (error || !data) return '';
+  if (error || !data) { console.error('署名URL失敗', path, error); return ''; }
   return data.signedUrl;
 }
 
@@ -154,7 +154,8 @@ export default function Home() {
       .from('users')
       .select('id, display_name, username')
       .eq('school', me.school)
-      .like('graduation_date', `${gradYear}%`)
+      .gte('graduation_date', `${gradYear}-01-01`)
+.lt('graduation_date', `${Number(gradYear) + 1}-01-01`)
       .neq('id', uid);
     if (data) setSchoolmates(data);
   };
@@ -483,7 +484,7 @@ export default function Home() {
   if (screen === 'top') return (
     <main style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', fontFamily: 'sans-serif' }}>
       <div style={{ width: '96px', height: '96px', background: C.white, borderRadius: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px', marginBottom: '24px', boxShadow: `0 6px 28px rgba(2,136,209,0.2)` }}>📸</div>
-      <h1 style={{ fontSize: '36px', fontWeight: '800', color: C.accentDark, marginBottom: '10px', letterSpacing: '-0.5px' }}>ZushiSnap</h1>
+      <h1 style={{ fontSize: '36px', fontWeight: '800', color: C.accentDark, marginBottom: '10px', letterSpacing: '-0.5px' }}>Capcy</h1>
       <p style={{ color: C.text, fontSize: '15px', marginBottom: '6px', textAlign: 'center', fontWeight: '500' }}>毎日1枚。卒業の日に、全部開く。</p>
       <p style={{ color: C.sub, fontSize: '13px', marginBottom: '56px', textAlign: 'center' }}>今日の写真は今日だけ見られる</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '320px' }}>
@@ -1016,7 +1017,7 @@ export default function Home() {
       <div style={s.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '20px' }}>📸</span>
-          <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>ZushiSnap</span>
+          <span style={{ fontSize: '18px', fontWeight: '700', color: C.accent }}>Capcy</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '13px', color: C.sub }}>@{username}</span>

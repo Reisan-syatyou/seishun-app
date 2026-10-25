@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ZushiSnap",
+  title: "Capcy",
   description: "毎日1枚。卒業の日に、全部開く。",
 };
 
@@ -32,7 +32,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#0288d1" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="ZushiSnap" />
+        <meta name="apple-mobile-web-app-title" content="Capcy" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

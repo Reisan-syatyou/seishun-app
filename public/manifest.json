@@ -1,6 +1,6 @@
 {
-  "name": "ZushiSnap",
-  "short_name": "ZushiSnap",
+  "name": "Capcy",
+  "short_name": "Capcy",
   "description": "毎日1枚。卒業の日に、全部開く。",
   "start_url": "/",
   "display": "standalone",
