@@ -88,6 +88,7 @@ export default function Home() {
   const [school, setSchool] = useState('');
   const [graduationDate, setGraduationDate] = useState('');
   const [error, setError] = useState('');
+    const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [todayPost, setTodayPost] = useState<{ image_url: string; caption?: string } | null>(null);
   const [userId, setUserId] = useState('');
@@ -520,8 +521,20 @@ export default function Home() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <input value={email} onChange={e => setEmail(e.target.value)} placeholder="メールアドレス" type="email" style={s.input} />
           <input value={password} onChange={e => setPassword(e.target.value)} placeholder="パスワード（6文字以上）" type="password" style={s.input} />
+                    {screen === 'register' && (
+            <div style={{ fontSize: '12px', color: C.sub, lineHeight: 1.6 }}>
+              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', cursor: 'pointer' }}>
+                <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop: '4px' }} />
+                <span>
+                  <a href="/terms" target="_blank" rel="noreferrer" style={{ color: C.accent }}>利用規約</a>と
+                  <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: C.accent }}>プライバシーポリシー</a>に同意します。
+                  18歳未満の方は、保護者の同意を得たうえで登録してください。
+                </span>
+              </label>
+            </div>
+          )}
           {error && <p style={{ color: C.danger, fontSize: '13px' }}>{error}</p>}
-          <button onClick={screen === 'login' ? login : register} disabled={loading} style={s.btn()}>
+          <button onClick={screen === 'login' ? login : register} disabled={loading || (screen === 'register' && !agreed)} style={s.btn()}>
             {loading ? '...' : screen === 'login' ? 'ログイン' : '登録する'}
           </button>
           <button onClick={() => { setScreen('top'); setError(''); }} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '14px', padding: '8px' }}>← 戻る</button>
